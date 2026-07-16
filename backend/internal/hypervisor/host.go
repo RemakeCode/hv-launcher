@@ -1,0 +1,48 @@
+package hypervisor
+
+import (
+	"context"
+	"os/exec"
+	"path/filepath"
+	"strconv"
+	"strings"
+
+	"hv-launcher/internal/system"
+)
+
+type CommandRunner interface {
+	Run(ctx context.Context, name string, args ...string) ([]byte, error)
+	LookPath(name string) (string, error)
+}
+
+type ExecRunner struct{}
+
+func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
+func (ExecRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
+
+type ModuleState interface {
+	Loaded(name string) bool
+	RefCount(name string) int
+}
+
+type SysModuleState struct {
+	Reader system.Reader
+	Root   string
+}
+
+func (s SysModuleState) Loaded(name string) bool {
+	_, err := s.Reader.ReadDir(filepath.Join(s.Root, name))
+	return err == nil
+}
+
+func (s SysModuleState) RefCount(name string) int {
+	data, err := s.Reader.ReadFile(filepath.Join(s.Root, name, "refcnt"))
+	if err != nil {
+		return 0
+	}
+	value, _ := strconv.Atoi(strings.TrimSpace(string(data)))
+	return value
+}
