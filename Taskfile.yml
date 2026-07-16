@@ -1,0 +1,158 @@
+version: '3'
+
+interval: 300ms
+
+vars:
+  PLUGIN_SLUG: hv-launcher
+  PACKAGE_DIR: package
+  PACKAGE_ROOT: '{{.PACKAGE_DIR}}/{{.PLUGIN_SLUG}}'
+  PACKAGE_ARCHIVE: '{{.PACKAGE_DIR}}/{{.PLUGIN_SLUG}}.zip'
+  DECKY_PLUGIN_DIR: '{{.HOME}}/homebrew/plugins'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  build:
+    desc: Build the frontend and Linux amd64 backend
+    deps:
+      - frontend
+      - backend
+
+  test:
+    desc: Run backend and frontend verification
+    deps:
+      - test:backend
+      - test:frontend
+
+  test:backend:
+    internal: true
+    dir: backend
+    cmds:
+      - go test -race ./...
+
+  test:frontend:
+    internal: true
+    cmds:
+      - npm run typecheck
+      - npm test
+
+  package:
+    desc: Build the plugin and create package/hv-launcher.zip
+    cmds:
+      - task: build
+      - task: package:artifact
+
+  package:sync:
+    internal: true
+    preconditions:
+      - test -f backend/out/hv-launcher
+      - test -f dist/index.js
+    cmds:
+      - mkdir -p bin
+      - cp backend/out/hv-launcher bin/hv-launcher
+      - rm -rf "{{.PACKAGE_ROOT}}"
+      - mkdir -p "{{.PACKAGE_ROOT}}/bin" "{{.PACKAGE_ROOT}}/dist"
+      - cp plugin.json package.json main.py "{{.PACKAGE_ROOT}}/"
+      - cp bin/hv-launcher "{{.PACKAGE_ROOT}}/bin/"
+      - cp -R dist/. "{{.PACKAGE_ROOT}}/dist/"
+
+  package:artifact:
+    internal: true
+    preconditions:
+      - sh: command -v bsdtar
+        msg: bsdtar is required to create the plugin ZIP
+    cmds:
+      - task: package:sync
+      - rm -f "{{.PACKAGE_ARCHIVE}}"
+      - bsdtar -a -cf "{{.PACKAGE_ARCHIVE}}" -C "{{.PACKAGE_DIR}}" "{{.PLUGIN_SLUG}}"
+
+  deploy:
+    desc: Synchronize package contents and copy them into Decky's plugin directory
+    preconditions:
+      - sh: command -v sudo
+        msg: sudo is required to deploy the plugin
+      - sh: command -v rsync
+        msg: rsync is required to deploy the plugin
+    cmds:
+      - task: package:sync
+      - 'sudo -n rsync -a --delete "{{.ROOT_DIR}}/{{.PACKAGE_ROOT}}/" "{{.DECKY_PLUGIN_DIR}}/{{.PLUGIN_SLUG}}/"'
+
+  clean:
+    desc: Remove all generated build and package files
+    cmds:
+      - rm -rf dist bin package backend/out backend/coverage.out
+
+  dev:
+    desc: Watch the frontend and Go backend, then deploy successful builds to Decky
+    platforms: [linux]
+    preconditions:
+      - sh: command -v air
+        msg: Air is required for Go development
+      - sh: command -v npm
+        msg: npm is required for frontend development
+      - sh: command -v flock
+        msg: flock is required to serialize parallel deployments
+      - sh: command -v rsync
+        msg: rsync is required to deploy the plugin
+      - sh: command -v sudo
+        msg: sudo is required to deploy the plugin
+    cmds:
+      - task --parallel frontend backend
+      - task: deploy
+      - task --parallel dev:frontend dev:backend
+
+  dev:frontend:
+    cmds:
+      - task --watch dev:frontend:build
+
+  dev:frontend:build:
+    sources:
+      - src/**/*
+      - main.py
+      - plugin.json
+      - package.json
+      - package-lock.json
+      - rollup.config.js
+      - tsconfig.json
+    cmds:
+      - npm run build
+      - task: dev:deploy
+
+  dev:backend:
+    cmds:
+      - air -c .air.toml
+
+  dev:backend:build:
+    cmds:
+      - task: backend
+      - task: dev:deploy
+
+  dev:deploy:
+    internal: true
+    preconditions:
+      - sh: command -v flock
+        msg: flock is required to serialize parallel deployments
+    cmds:
+      - mkdir -p .task
+      - flock .task/hv-launcher-deploy.lock task deploy
+
+  frontend:
+    desc: Build the Decky frontend
+    cmds:
+      - npm run build
+
+  frontend:visual:
+    desc: Build the Decky frontend with a spoofed QAM readiness fixture
+    vars:
+      FIXTURE: '{{default "hypervisor-ready" .FIXTURE}}'
+    cmds:
+      - 'HV_QAM_VISUAL_FIXTURE={{.FIXTURE}} npm run build'
+
+  backend:
+    desc: Build the Linux amd64 Go backend
+    dir: backend
+    cmds:
+      - mkdir -p out
+      - CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o out/hv-launcher ./cmd/hv-launcher

@@ -1,0 +1,16 @@
+node_modules/
+dist/
+bin/
+package/
+backend/out/
+backend/coverage.out
+.air/
+.task/
+*.log
+.DS_Store
+.idea/
+openspec
+.codex
+__pycache__
+docs
+.task
