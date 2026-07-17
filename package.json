@@ -1,6 +1,6 @@
 {
   "name": "hv-launcher",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Decky readiness and hypervisor game-session manager",
   "type": "module",
   "scripts": {
