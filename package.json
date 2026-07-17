@@ -5,12 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "npm run typecheck && rollup -c",
+    "lint:commits": "commitlint --verbose",
     "watch": "npm run typecheck && rollup -c -w",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "license": "GPL-2.0-only",
   "devDependencies": {
+    "@commitlint/cli": "^21.2.1",
+    "@commitlint/config-conventional": "^21.2.0",
     "@decky/rollup": "^1.0.2",
     "@decky/ui": "^4.11.0",
     "@rollup/plugin-replace": "^5.0.7",

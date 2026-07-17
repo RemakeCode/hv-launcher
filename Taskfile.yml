@@ -26,6 +26,12 @@ tasks:
       - test:backend
       - test:frontend
 
+  vet:
+    desc: Run Go static analysis
+    dir: backend
+    cmds:
+      - go vet ./...
+
   test:backend:
     internal: true
     dir: backend
@@ -43,6 +49,28 @@ tasks:
     cmds:
       - task: build
       - task: package:artifact
+
+  package:verify:
+    desc: Verify the packaged Decky plugin structure
+    preconditions:
+      - test -f "{{.PACKAGE_ARCHIVE}}"
+      - sh: command -v bsdtar
+        msg: bsdtar is required to inspect the plugin ZIP
+    cmds:
+      - |
+        set -eu
+        archive="{{.PACKAGE_ARCHIVE}}"
+        temp_dir="$(mktemp -d)"
+        trap 'rm -rf "$temp_dir"' EXIT
+        bsdtar -xf "$archive" -C "$temp_dir"
+        test "$(find "$temp_dir" -mindepth 1 -maxdepth 1 | wc -l | tr -d ' ')" -eq 1
+        root="$temp_dir/{{.PLUGIN_SLUG}}"
+        test -d "$root"
+        test -f "$root/plugin.json"
+        test -f "$root/package.json"
+        test -f "$root/main.py"
+        test -f "$root/dist/index.js"
+        test -x "$root/bin/hv-launcher"
 
   package:sync:
     internal: true

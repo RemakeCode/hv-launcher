@@ -212,12 +212,14 @@ function normalizeDisplayState(status: number | undefined): "idle" | "launching"
   return "idle";
 }
 
+type TimerHandle = number | ReturnType<typeof setTimeout>;
+
 export interface LifetimeObserverOptions {
   bridge?: SteamBridge;
   onError?(error: Error): void;
   sendLifetime?: typeof postLifetime;
-  schedule?: (callback: () => void, milliseconds: number) => ReturnType<typeof setTimeout>;
-  cancel?: (handle: ReturnType<typeof setTimeout>) => void;
+  schedule?: (callback: () => void, milliseconds: number) => TimerHandle;
+  cancel?: (handle: TimerHandle) => void;
 }
 
 export function observeSteamLifetime(options: LifetimeObserverOptions = {}): () => void {
@@ -226,7 +228,7 @@ export function observeSteamLifetime(options: LifetimeObserverOptions = {}): () 
   const schedule = options.schedule ?? setTimeout;
   const cancel = options.cancel ?? clearTimeout;
   let active = true;
-  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const timers = new Set<TimerHandle>();
   const lifetimeRegistration = bridge.GameSessions.RegisterForAppLifetimeNotifications((notification) => {
     const forward = (attempt: number) => {
       if (!active) return;
