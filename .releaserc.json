@@ -13,10 +13,10 @@
         "preset": "conventionalcommits",
         "presetConfig": {
           "types": [
-            { "type": "feat", "section": "🚀 New Features" },
-            { "type": "fix", "section": "🐛 Bug Fixes" },
-            { "type": "perf", "section": "⚡ Performance Improvements" },
-            { "type": "chore", "hidden": true }
+            { "type": "feat", "section": "🚀 New Features", "effect": "bump" },
+            { "type": "fix", "section": "🐛 Bug Fixes", "effect": "bump" },
+            { "type": "perf", "section": "⚡ Performance Improvements", "effect": "bump" },
+            { "type": "chore", "section": "Chores", "effect": "hidden" }
           ]
         }
       }
