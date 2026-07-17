@@ -91,17 +91,7 @@ jobs:
         run: npm ci
 
       - name: Preview semantic release
-        uses: cycjimmy/semantic-release-action@v4
-        with:
-          semantic_version: 24
-          dry_run: true
-          extra_plugins: |
-            conventional-changelog-conventionalcommits@9.3.1
-            @semantic-release/release-notes-generator
-            @semantic-release/changelog
-            @semantic-release/exec
-            @semantic-release/github
-            @semantic-release/git
+        run: npm run release:preview
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -159,15 +149,6 @@ jobs:
         run: npm ci
 
       - name: Prepare semantic release
-        uses: cycjimmy/semantic-release-action@v4
-        with:
-          semantic_version: 24
-          extra_plugins: |
-            conventional-changelog-conventionalcommits@9.3.1
-            @semantic-release/release-notes-generator
-            @semantic-release/changelog
-            @semantic-release/exec
-            @semantic-release/github
-            @semantic-release/git
+        run: npm run release
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}

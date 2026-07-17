@@ -13,10 +13,11 @@
         "preset": "conventionalcommits",
         "presetConfig": {
           "types": [
-            { "type": "feat", "section": "🚀 New Features", "effect": "bump" },
-            { "type": "fix", "section": "🐛 Bug Fixes", "effect": "bump" },
-            { "type": "perf", "section": "⚡ Performance Improvements", "effect": "bump" },
-            { "type": "chore", "section": "Chores", "effect": "hidden" }
+            { "type": "feat", "section": "🚀 New Features", "hidden": false },
+            { "type": "fix", "scope": "release", "section": "Release tooling", "hidden": true },
+            { "type": "fix", "section": "🐛 Bug Fixes", "hidden": false },
+            { "type": "perf", "section": "⚡ Performance Improvements", "hidden": false },
+            { "type": "chore", "section": "Chores", "hidden": true }
           ]
         }
       }
