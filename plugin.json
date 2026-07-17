@@ -1,7 +1,7 @@
 {
     "name": "HV Launcher",
     "author": "afk-RightNow",
-    "flags": ["debug", "root"],
+    "flags": ["root"],
     "api_version": 1,
     "publish": {
         "tags": ["hypervisor", "readiness", "launcher"],
