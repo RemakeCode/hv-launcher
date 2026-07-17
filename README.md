@@ -53,11 +53,19 @@ The readiness panel checks these requirements and explains anything that needs a
 - If Secure Boot is enabled, approve the module signing key when required by your Linux distribution.
 - Install a supported LinUwUx Proton build in a Steam `compatibilitytools.d` directory.
 
-HV Launcher checks these items but does not install or change them for you.
+**HV Launcher checks these items but does not install or change them for you.**
 
 ### Stored data
 
 HV Launcher stores its game settings at `$XDG_DATA_HOME/hv-launcher/config.json`, or `~/.local/share/hv-launcher/config.json` when `XDG_DATA_HOME` is not set.
+
+### Viewing logs
+
+Follow the Decky Loader logs, including messages from HV Launcher, with:
+
+```sh
+journalctl -u plugin_loader -f
+```
 
 ### Disable and uninstall
 
@@ -91,7 +99,7 @@ HV Launcher never stops virtual machines. It records which module changes it mad
 
 ### Development
 
-Build requirements are Task, Go 1.23+, Node.js, and npm; packaging also requires `bsdtar`. Air is only required for the live Linux development workflow described below.
+Build requirements are Task, Go 1.23+, Node.js, and npm. Air is only required for the live Linux development workflow described below.
 
 ```sh
 npm install
