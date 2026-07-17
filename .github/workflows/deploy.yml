@@ -96,7 +96,7 @@ jobs:
           semantic_version: 24
           dry_run: true
           extra_plugins: |
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@9.3.1
             @semantic-release/release-notes-generator
             @semantic-release/changelog
             @semantic-release/exec
@@ -163,7 +163,7 @@ jobs:
         with:
           semantic_version: 24
           extra_plugins: |
-            conventional-changelog-conventionalcommits
+            conventional-changelog-conventionalcommits@9.3.1
             @semantic-release/release-notes-generator
             @semantic-release/changelog
             @semantic-release/exec
