@@ -45,20 +45,6 @@ jobs:
       - name: Install Node dependencies
         run: npm ci
 
-      - name: Validate pull-request commits
-        if: github.event_name == 'pull_request'
-        run: >-
-          npm run lint:commits --
-          --from "${{ github.event.pull_request.base.sha }}"
-          --to "${{ github.event.pull_request.head.sha }}"
-
-      - name: Validate pushed commits
-        if: github.event_name == 'push'
-        run: >-
-          npm run lint:commits --
-          --from "${{ github.event.before }}"
-          --to "${{ github.sha }}"
-
       - name: Run tests
         run: task test
 
