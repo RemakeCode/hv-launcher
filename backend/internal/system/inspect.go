@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"hv-launcher/internal/model"
+	"hv-launcher/internal/proton"
 )
 
 type Inspector struct {
@@ -158,6 +159,7 @@ func (i *Inspector) inspectModules(ctx context.Context, release, controllerState
 
 func (i *Inspector) inspectProton() model.ProtonStatus {
 	found := map[string]bool{}
+	invalid := map[string]string{}
 	for _, root := range i.Paths.SteamRoots {
 		entries, err := i.Reader.ReadDir(filepath.Join(root, "compatibilitytools.d"))
 		if err != nil {
@@ -166,9 +168,17 @@ func (i *Inspector) inspectProton() model.ProtonStatus {
 		for _, entry := range entries {
 			name := entry.Name()
 			lower := strings.ToLower(name)
-			if entry.IsDir() && strings.Contains(lower, "linuwux") {
-				found[name] = true
+			if !entry.IsDir() || !strings.Contains(lower, "linuwux") {
+				continue
 			}
+			if _, err := proton.InspectInstalled(filepath.Join(root, "compatibilitytools.d", name)); err != nil {
+				if !found[name] {
+					invalid[name] = err.Error()
+				}
+				continue
+			}
+			found[name] = true
+			delete(invalid, name)
 		}
 	}
 	tools := make([]string, 0, len(found))
@@ -176,7 +186,12 @@ func (i *Inspector) inspectProton() model.ProtonStatus {
 		tools = append(tools, name)
 	}
 	sort.Strings(tools)
-	return model.ProtonStatus{Found: len(tools) > 0, Tools: tools}
+	invalidTools := make([]model.InvalidProtonTool, 0, len(invalid))
+	for name, detail := range invalid {
+		invalidTools = append(invalidTools, model.InvalidProtonTool{Name: name, Detail: detail})
+	}
+	sort.Slice(invalidTools, func(left, right int) bool { return invalidTools[left].Name < invalidTools[right].Name })
+	return model.ProtonStatus{Found: len(tools) > 0, Tools: tools, Invalid: invalidTools}
 }
 
 func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.PathMode, modules model.ModuleStatus, proton model.ProtonStatus, _ map[string]bool) model.SystemStatus {
@@ -194,7 +209,7 @@ func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.Pat
 	if path == model.PathHypervisor {
 		checks = append(checks, model.Check{ID: "emulation-module", OK: modules.EmulationInstalled && modules.EmulationCompatible, Label: "CPUID module", Detail: moduleDetail(modules), Remedy: failedRemedy(modules.EmulationInstalled && modules.EmulationCompatible, "Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it.")})
 	}
-	checks = append(checks, model.Check{ID: "proton", OK: proton.Found, Label: "Proton", Detail: protonDetail(proton), Remedy: failedRemedy(proton.Found, "Manually extract a supported LinUwUx Proton build into Steam's compatibilitytools.d directory.")})
+	checks = append(checks, model.Check{ID: "proton", OK: proton.Found, Label: "Proton", Detail: protonDetail(proton), Remedy: failedRemedy(proton.Found, "Open Readiness details and setup to install a LinUwUx Proton archive.")})
 
 	aggregate := model.StatusSetupRequired
 	if modules.ControllerState == "recovery-required" {
@@ -333,6 +348,9 @@ func moduleDetail(status model.ModuleStatus) string {
 
 func protonDetail(status model.ProtonStatus) string {
 	if !status.Found {
+		if len(status.Invalid) > 0 {
+			return status.Invalid[0].Name + ": " + status.Invalid[0].Detail
+		}
 		return "no supported build detected"
 	}
 	return strings.Join(status.Tools, ", ")

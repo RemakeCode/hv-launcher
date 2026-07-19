@@ -15,8 +15,10 @@ import (
 
 	"hv-launcher/internal/config"
 	"hv-launcher/internal/hypervisor"
+	"hv-launcher/internal/jobs"
 	"hv-launcher/internal/manage"
 	"hv-launcher/internal/model"
+	"hv-launcher/internal/proton"
 	"hv-launcher/internal/system"
 )
 
@@ -59,7 +61,7 @@ func (j *testJournal) Load() (*hypervisor.JournalRecord, error)    { return j.re
 func (j *testJournal) Write(record hypervisor.JournalRecord) error { j.record = &record; return nil }
 func (j *testJournal) Clear() error                                { j.record = nil; return nil }
 
-func newTestService(t *testing.T) (*Service, *config.Store, *hypervisor.Controller) {
+func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.Controller) {
 	t.Helper()
 	root := t.TempDir()
 	settings := filepath.Join(root, "settings")
@@ -67,10 +69,11 @@ func newTestService(t *testing.T) (*Service, *config.Store, *hypervisor.Controll
 	if err != nil {
 		t.Fatal(err)
 	}
-	steamRoot := filepath.Join(root, "Steam")
-	if err := os.MkdirAll(filepath.Join(steamRoot, "compatibilitytools.d", "GE-Proton11-1-LinUwUx"), 0o755); err != nil {
+	steamRoot := filepath.Join(root, ".local", "share", "Steam")
+	if err := os.MkdirAll(filepath.Join(steamRoot, "steamapps"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	writeServerProtonFixture(t, filepath.Join(steamRoot, "compatibilitytools.d"), "GE-Proton11-1-LinUwUx")
 	cpu := filepath.Join(root, "cpuinfo")
 	kernel := filepath.Join(root, "osrelease")
 	writeServerFile(t, cpu, "processor : 0\nvendor_id : AuthenticAMD\ncpu family : 23\nmodel : 49\nmodel name : AMD Ryzen\nflags :\n\n")
@@ -85,15 +88,20 @@ func newTestService(t *testing.T) (*Service, *config.Store, *hypervisor.Controll
 		CPUInfo: cpu, KernelRelease: kernel, ModulesRoot: modules, SteamRoots: []string{steamRoot},
 	}}
 	manager := &manage.Manager{Store: store, WrapperPath: "/home/deck/.local/share/hv-launcher/hv-launcher-wrapper"}
-	service, err := New(Options{ListenAddress: "127.0.0.1:42991", Config: store, Inspector: inspector, Manager: manager, Controller: controller, ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc")})
+	service, err := New(Options{
+		ListenAddress: "127.0.0.1:42991", Config: store, Inspector: inspector, Manager: manager, Controller: controller,
+		ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc"),
+		Proton:           proton.NewInstaller(root),
+		ProtonSelections: proton.NewSelectionStore(), Jobs: jobs.NewCoordinator(),
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return service, store, controller
+	return service, root, store, controller
 }
 
 func TestHandlerRoutesAndStrictRequests(t *testing.T) {
-	service, store, _ := newTestService(t)
+	service, _, store, _ := newTestService(t)
 	for _, path := range []string{"/v1/status", "/v1/config"} {
 		response := perform(service.Handler(), http.MethodGet, path, "")
 		if response.Code != http.StatusOK {
@@ -130,7 +138,7 @@ func TestHandlerRoutesAndStrictRequests(t *testing.T) {
 }
 
 func TestDeckyCORSPreflight(t *testing.T) {
-	service, _, _ := newTestService(t)
+	service, _, _, _ := newTestService(t)
 	request := httptest.NewRequest(http.MethodOptions, "/v1/lifetime", nil)
 	request.Header.Set("Origin", deckyOrigin)
 	request.Header.Set("Access-Control-Request-Method", http.MethodPost)
@@ -150,7 +158,7 @@ func TestDeckyCORSPreflight(t *testing.T) {
 }
 
 func TestDeckyCORSRejectsOtherBrowserOrigins(t *testing.T) {
-	service, _, _ := newTestService(t)
+	service, _, _, _ := newTestService(t)
 	request := httptest.NewRequest(http.MethodGet, "/v1/status", nil)
 	request.Header.Set("Origin", "https://example.com")
 	response := httptest.NewRecorder()
@@ -162,7 +170,7 @@ func TestDeckyCORSRejectsOtherBrowserOrigins(t *testing.T) {
 }
 
 func TestEnableDisableAndConflict(t *testing.T) {
-	service, _, _ := newTestService(t)
+	service, _, _, _ := newTestService(t)
 	enabled := perform(service.Handler(), http.MethodPost, "/v1/games/10/enable", `{"name":"Frontend Game","shortcut":true,"currentLaunch":"MANGOHUD=1 %command%"}`)
 	if enabled.Code != http.StatusOK {
 		t.Fatalf("enable returned %d: %s", enabled.Code, enabled.Body.String())
@@ -182,7 +190,7 @@ func TestEnableDisableAndConflict(t *testing.T) {
 }
 
 func TestEnableRejectsMalformedFrontendMetadata(t *testing.T) {
-	service, _, _ := newTestService(t)
+	service, _, _, _ := newTestService(t)
 	tests := []string{
 		`{"name":"","shortcut":true,"currentLaunch":""}`,
 		`{"name":"Game","shortcut":true,"currentLaunch":"","target":"/bin/evil"}`,
@@ -196,7 +204,7 @@ func TestEnableRejectsMalformedFrontendMetadata(t *testing.T) {
 }
 
 func TestConcurrentSessionCallsAreSerialized(t *testing.T) {
-	service, store, controller := newTestService(t)
+	service, _, store, controller := newTestService(t)
 	if err := store.PutGame(model.ManagedGame{AppID: "10", Name: "Test"}); err != nil {
 		t.Fatal(err)
 	}
@@ -223,7 +231,7 @@ func TestConcurrentSessionCallsAreSerialized(t *testing.T) {
 }
 
 func TestLoopbackBindingIsMandatory(t *testing.T) {
-	service, _, _ := newTestService(t)
+	service, _, _, _ := newTestService(t)
 	options := service.options
 	for _, address := range []string{"0.0.0.0:42991", "[::1]:42991", "localhost:42991", ""} {
 		options.ListenAddress = address
@@ -234,7 +242,7 @@ func TestLoopbackBindingIsMandatory(t *testing.T) {
 }
 
 func TestRequestSizeLimit(t *testing.T) {
-	service, _, _ := newTestService(t)
+	service, _, _, _ := newTestService(t)
 	payload := `{"appId":"10","padding":"` + strings.Repeat("x", maxRequestBytes) + `"}`
 	response := perform(service.Handler(), http.MethodPost, "/v1/sessions", payload)
 	if response.Code != http.StatusBadRequest {
@@ -258,6 +266,22 @@ func writeServerFile(t *testing.T, path, contents string) {
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func writeServerProtonFixture(t *testing.T, toolsRoot, name string) {
+	t.Helper()
+	root := filepath.Join(toolsRoot, name)
+	if err := os.MkdirAll(filepath.Join(root, "files"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `"compatibilitytools" { "compat_tools" { "` + name + `" { "install_path" "." } } }`
+	writeServerFile(t, filepath.Join(root, "compatibilitytool.vdf"), manifest)
+	writeServerFile(t, filepath.Join(root, "proton"), "launcher")
+	if err := os.Chmod(filepath.Join(root, "proton"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeServerFile(t, filepath.Join(root, "toolmanifest.vdf"), `"manifest" {}`)
+	writeServerFile(t, filepath.Join(root, "version"), "test\n")
 }
 
 func jsonString(value string) string {
