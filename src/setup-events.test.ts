@@ -83,4 +83,28 @@ describe("plugin-lifetime setup events", () => {
     store.stop();
     expect(stream.closed).toBe(true);
   });
+
+  it("refreshes a cached running job that completed while the event stream was disconnected", async () => {
+    const stream = new FakeEventStream();
+    const running = snapshot("running");
+    const success = snapshot("succeeded");
+    getActiveSetupJob
+      .mockResolvedValueOnce({ active: true, job: running })
+      .mockResolvedValueOnce({ active: false });
+    getSetupJob.mockResolvedValueOnce(running).mockResolvedValueOnce(success);
+    const terminal = vi.fn();
+    const listener = vi.fn();
+    const store = new SetupEventStore(() => stream);
+    store.subscribe(listener);
+    store.start(terminal);
+
+    await vi.waitFor(() => expect(store.current("proton-install")).toEqual(running));
+    stream.onopen?.(new Event("open"));
+
+    await vi.waitFor(() => expect(store.current("proton-install")).toEqual(success));
+    expect(listener).toHaveBeenLastCalledWith(success);
+    expect(terminal).toHaveBeenCalledOnce();
+    expect(getSetupJob).toHaveBeenLastCalledWith(running.id);
+    store.stop();
+  });
 });

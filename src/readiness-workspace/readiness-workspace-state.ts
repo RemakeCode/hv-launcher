@@ -33,6 +33,20 @@ export type ProtonDraftAction =
   | { type: "completion-displayed" }
   | { type: "failed"; error: string };
 
+function protonStageForJob(job: SetupJobSnapshot): ProtonFlowStage {
+  if (job.state === "running") return "installing";
+  return job.state === "succeeded" ? "completing" : "failure";
+}
+
+function attachProtonJob(state: ProtonDraft, job: SetupJobSnapshot): ProtonDraft {
+  return {
+    ...state,
+    stage: protonStageForJob(job),
+    job,
+    error: job.error,
+  };
+}
+
 export function protonDraftReducer(
   state: ProtonDraft,
   action: ProtonDraftAction,
@@ -58,20 +72,11 @@ export function protonDraftReducer(
       return { ...state, stage: "installing", job: undefined, error: undefined };
     case "job-started":
       if (state.job?.id === action.job.id && state.job.state !== "running") return state;
-      return { ...state, stage: "installing", job: action.job, error: undefined };
+      return attachProtonJob(state, action.job);
     case "job-updated":
       if (action.job.kind !== "proton-install") return state;
       if (state.job && state.job.id !== action.job.id && state.job.state === "running") return state;
-      return {
-        ...state,
-        stage: action.job.state === "running"
-          ? "installing"
-          : action.job.state === "succeeded"
-            ? "completing"
-            : "failure",
-        job: action.job,
-        error: action.job.error,
-      };
+      return attachProtonJob(state, action.job);
     case "completion-displayed":
       return state.stage === "completing"
         ? { stage: "idle", lastInstall: state.job?.result }

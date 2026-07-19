@@ -148,6 +148,24 @@ describe("readiness workspace state", () => {
     expect(selectedAgain.lastInstall).toEqual(job("succeeded").result);
   });
 
+  it("preserves terminal state when the started-job attachment already completed", () => {
+    const reviewed = protonDraftReducer(emptyProtonDraft, {
+      type: "selection-ready",
+      path: "/tmp/tool.tar.xz",
+      selection,
+    });
+    const requested = protonDraftReducer(reviewed, { type: "install-requested" });
+
+    const succeeded = protonDraftReducer(requested, { type: "job-started", job: job("succeeded") });
+    expect(succeeded.stage).toBe("completing");
+    expect(succeeded.job).toEqual(job("succeeded"));
+
+    const failedJob = { ...job("failed"), error: "disk is full" };
+    const failed = protonDraftReducer(requested, { type: "job-started", job: failedJob });
+    expect(failed.stage).toBe("failure");
+    expect(failed.error).toBe("disk is full");
+  });
+
   it("handles supported extensions and picker cancellation", () => {
     expect(isSupportedProtonArchive("a.tar.gz")).toBe(true);
     expect(isSupportedProtonArchive("a.tgz")).toBe(true);
