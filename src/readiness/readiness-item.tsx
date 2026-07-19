@@ -6,7 +6,7 @@ import {
   FaInfoCircle,
   FaSyncAlt
 } from 'react-icons/fa';
-import type { AggregateStatus, SystemStatus } from './types';
+import type { AggregateStatus, SystemStatus } from '../types';
 
 export type ReadinessState = 'success' | 'info' | 'active' | 'warning' | 'error';
 

@@ -11,7 +11,12 @@ const visualFixtures = new Set([
     'hypervisor-ready',
     'setup-required',
     'recovery-required',
-    'unsupported'
+    'unsupported',
+    'proton-missing',
+    'proton-confirm',
+    'proton-installing',
+    'proton-success',
+    'proton-failure'
 ]);
 
 if (!visualFixtures.has(visualFixture)) {

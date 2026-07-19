@@ -4,13 +4,13 @@ import {
     DialogControlsSectionHeader,
     DialogLabel,
     SidebarNavigation,
-    Spinner,
     ToggleField
 } from '@decky/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getConfiguration, getStatus } from './api';
+import { getConfiguration, getStatus } from '../api';
 import { canChangeShortcut, groupShortcuts, shortcutActionError, shortcutDescription } from './management';
-import { logger } from './shared/logger';
+import { logger } from '../shared/logger';
+import { LoadingSpinner } from '../shared/loading-spinner';
 import {
     disableManagedGame,
     discoverGames,
@@ -18,8 +18,8 @@ import {
     enableManagedGame,
     observeSteamOverviews,
     SteamLibraryLoadingError
-} from './steam';
-import type { Configuration, DisplayState, Game, SystemStatus } from './types';
+} from '../steam';
+import type { Configuration, DisplayState, Game, SystemStatus } from '../types';
 import { GiGamepad } from 'react-icons/gi';
 
 const EMPTY_CONFIGURATION: Configuration = { version: 1, games: {} };
@@ -117,7 +117,7 @@ export function ShortcutManagementPage() {
                     icon: <GiGamepad />,
                     content: (
                         <DialogBody>
-                            {!status && !error && <Spinner />}
+                            {!status && !error && <LoadingSpinner />}
                             {status && status.status !== 'hypervisor-ready' && (
                                 <DialogLabel>
                                     New shortcuts cannot be enabled in the current host state. Managed shortcuts can

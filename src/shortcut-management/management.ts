@@ -1,4 +1,4 @@
-import type { Configuration, DisplayState, Game, SystemStatus } from "./types";
+import type { Configuration, DisplayState, Game, SystemStatus } from "../types";
 
 export interface ShortcutSections {
   managed: Game[];
