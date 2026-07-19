@@ -69,9 +69,18 @@ export class SetupEventStore {
   async reconcile() {
     try {
       const active = await getActiveSetupJob();
-      if (!active.job) return;
-      const snapshot = await getSetupJob(active.job.id);
-      this.accept(snapshot);
+      const jobIds = [...this.latestByKind.values()]
+        .filter((snapshot) => snapshot.state === "running")
+        .map((snapshot) => snapshot.id);
+      if (active.job) {
+        const cachedIndex = jobIds.indexOf(active.job.id);
+        if (cachedIndex >= 0) jobIds.splice(cachedIndex, 1);
+        jobIds.push(active.job.id);
+      }
+      for (const jobId of jobIds) {
+        const snapshot = await getSetupJob(jobId);
+        this.accept(snapshot);
+      }
     } catch (reason) {
       logger.error("Failed to reconcile setup job state", reason);
     }
