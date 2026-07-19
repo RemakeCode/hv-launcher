@@ -51,7 +51,6 @@ The readiness panel checks these requirements and explains anything that needs a
 - If UMIP must be disabled, add `clearcpuid=514` (or `clearcpuid=umip`) to the kernel command line and reboot.
 - If the CPUID module is required, install `cpuid_fault_emulation` for the currently running kernel. Its build tools and kernel headers must already be available on the system.
 - If Secure Boot is enabled, approve the module signing key when required by your Linux distribution.
-- Install a supported LinUwUx Proton build in a Steam `compatibilitytools.d` directory.
 
 **HV Launcher checks these items but does not install or change them for you.**
 
