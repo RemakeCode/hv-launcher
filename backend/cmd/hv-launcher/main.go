@@ -15,8 +15,10 @@ import (
 
 	"hv-launcher/internal/config"
 	"hv-launcher/internal/hypervisor"
+	"hv-launcher/internal/jobs"
 	backendlogger "hv-launcher/internal/logger"
 	"hv-launcher/internal/manage"
+	"hv-launcher/internal/proton"
 	"hv-launcher/internal/server"
 	"hv-launcher/internal/steam"
 	"hv-launcher/internal/system"
@@ -44,8 +46,12 @@ func run(args []string) error {
 	switch args[0] {
 	case "run":
 		return runWrapped(args[1:])
+	case proton.WorkerCommand:
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		return proton.RunWorker(ctx, os.Stdin, os.Stdout)
 	default:
-		return fmt.Errorf("unknown command %q (expected run or no command)", args[0])
+		return fmt.Errorf("unknown command %q (expected run, %s, or no command)", args[0], proton.WorkerCommand)
 	}
 }
 
@@ -54,6 +60,14 @@ func serve() error {
 	userHome := os.Getenv("DECKY_USER_HOME")
 	if runtimeDir == "" || userHome == "" {
 		return errors.New("DECKY_PLUGIN_RUNTIME_DIR and DECKY_USER_HOME are required")
+	}
+	userInfo, err := os.Stat(userHome)
+	if err != nil {
+		return fmt.Errorf("inspect Decky user home: %w", err)
+	}
+	userStat, ok := userInfo.Sys().(*syscall.Stat_t)
+	if !ok {
+		return errors.New("Decky user ownership is unavailable")
 	}
 	logger := slog.Default()
 	logger.Info("backend starting", "listen_address", defaultListenAddress, "effective_uid", os.Geteuid())
@@ -70,6 +84,10 @@ func serve() error {
 	executable, err := os.Executable()
 	if err != nil {
 		return err
+	}
+	protonWorker, err := proton.NewWorkerClient(executable, userHome, int(userStat.Uid), int(userStat.Gid))
+	if err != nil {
+		return fmt.Errorf("configure unprivileged Proton worker: %w", err)
 	}
 	wrapperPath, err := wrapper.Install(executable, userHome)
 	if err != nil {
@@ -103,7 +121,9 @@ func serve() error {
 		ListenAddress: defaultListenAddress, Config: store,
 		Inspector: system.NewInspector(userHome, runtimeDir),
 		Manager:   &manage.Manager{Store: store, WrapperPath: wrapperPath}, Controller: controller,
-		Logger: logger,
+		Logger:           logger,
+		Proton:           protonWorker,
+		ProtonSelections: proton.NewSelectionStore(), Jobs: jobs.NewCoordinator(),
 	})
 	if err != nil {
 		return err

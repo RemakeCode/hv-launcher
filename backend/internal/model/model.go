@@ -58,8 +58,14 @@ type ModuleStatus struct {
 }
 
 type ProtonStatus struct {
-	Found bool     `json:"found"`
-	Tools []string `json:"tools"`
+	Found   bool                `json:"found"`
+	Tools   []string            `json:"tools"`
+	Invalid []InvalidProtonTool `json:"invalid,omitempty"`
+}
+
+type InvalidProtonTool struct {
+	Name   string `json:"name"`
+	Detail string `json:"detail"`
 }
 
 type SystemStatus struct {

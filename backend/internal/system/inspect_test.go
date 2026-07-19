@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"hv-launcher/internal/model"
@@ -115,9 +116,7 @@ func TestInspectDerivesActionableStatusesWithoutMutation(t *testing.T) {
 	}
 	write("modules/kvm_amd/refcnt", "1\n")
 	steamRoot := filepath.Join(root, "Steam")
-	if err := os.MkdirAll(filepath.Join(steamRoot, "compatibilitytools.d", "GE-Proton11-1-LinUwUx"), 0o755); err != nil {
-		t.Fatal(err)
-	}
+	writeInstalledProtonFixture(t, filepath.Join(steamRoot, "compatibilitytools.d"), "GE-Proton11-1-LinUwUx")
 	runner := &fakeRunner{err: errors.New("module missing")}
 	inspector := &Inspector{Reader: OSReader{}, Runner: runner, Paths: Paths{
 		CPUInfo: cpuPath, KernelRelease: kernelPath, ModulesRoot: moduleRoot, SteamRoots: []string{steamRoot},
@@ -184,6 +183,11 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 			t.Fatalf("got %s, want %s", status.Status, model.StatusSetupRequired)
 		}
 		assertCheckRemedy(t, status.Checks, "proton")
+		for _, check := range status.Checks {
+			if check.ID == "proton" && check.Remedy != "Open Readiness details and setup to install a LinUwUx Proton archive." {
+				t.Fatalf("unexpected Proton remedy: %q", check.Remedy)
+			}
+		}
 	})
 
 	t.Run("incompatible module requires setup", func(t *testing.T) {
@@ -201,11 +205,11 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 func TestInspectProtonRejectsUnpatchedSunsetSLR(t *testing.T) {
 	steamRoot := t.TempDir()
 	toolsRoot := filepath.Join(steamRoot, "compatibilitytools.d")
-	for _, name := range []string{"proton-sunset-slr", "GE-Proton11-1-LinUwUx"} {
-		if err := os.MkdirAll(filepath.Join(toolsRoot, name), 0o755); err != nil {
-			t.Fatal(err)
-		}
+	writeInstalledProtonFixture(t, toolsRoot, "proton-sunset-slr")
+	if err := os.MkdirAll(filepath.Join(toolsRoot, "Name-Only-LinUwUx"), 0o755); err != nil {
+		t.Fatal(err)
 	}
+	writeInstalledProtonFixture(t, toolsRoot, "GE-Proton11-1-LinUwUx")
 
 	status := (&Inspector{Reader: OSReader{}, Paths: Paths{SteamRoots: []string{steamRoot}}}).inspectProton()
 	if !status.Found {
@@ -213,6 +217,26 @@ func TestInspectProtonRejectsUnpatchedSunsetSLR(t *testing.T) {
 	}
 	if len(status.Tools) != 1 || status.Tools[0] != "GE-Proton11-1-LinUwUx" {
 		t.Fatalf("unexpected supported Proton tools: %v", status.Tools)
+	}
+	if len(status.Invalid) != 1 || status.Invalid[0].Name != "Name-Only-LinUwUx" || !strings.Contains(status.Invalid[0].Detail, "compatibilitytool.vdf") {
+		t.Fatalf("unexpected invalid candidates: %+v", status.Invalid)
+	}
+}
+
+func TestInspectProtonReportsIncompleteLinUwUxCandidate(t *testing.T) {
+	steamRoot := t.TempDir()
+	toolsRoot := filepath.Join(steamRoot, "compatibilitytools.d")
+	writeInstalledProtonFixture(t, toolsRoot, "Incomplete-LinUwUx")
+	if err := os.Remove(filepath.Join(toolsRoot, "Incomplete-LinUwUx", "version")); err != nil {
+		t.Fatal(err)
+	}
+
+	status := (&Inspector{Reader: OSReader{}, Paths: Paths{SteamRoots: []string{steamRoot}}}).inspectProton()
+	if status.Found || len(status.Tools) != 0 || len(status.Invalid) != 1 {
+		t.Fatalf("unexpected Proton status: %+v", status)
+	}
+	if detail := protonDetail(status); !strings.Contains(detail, "version") {
+		t.Fatalf("detail is not actionable: %q", detail)
 	}
 }
 
@@ -268,4 +292,26 @@ func assertCheckOK(t *testing.T, checks []model.Check, id string) {
 		}
 	}
 	t.Fatalf("check %s missing", id)
+}
+
+func writeInstalledProtonFixture(t *testing.T, toolsRoot, name string) {
+	t.Helper()
+	root := filepath.Join(toolsRoot, name)
+	if err := os.MkdirAll(filepath.Join(root, "files", "empty"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := `"compatibilitytools" { "compat_tools" { "` + name + `" { "install_path" "." } } }`
+	for relative, fixture := range map[string]struct {
+		contents string
+		mode     os.FileMode
+	}{
+		"compatibilitytool.vdf": {manifest, 0o644},
+		"proton":                {"launcher", 0o755},
+		"toolmanifest.vdf":      {`"manifest" {}`, 0o644},
+		"version":               {"test\n", 0o644},
+	} {
+		if err := os.WriteFile(filepath.Join(root, relative), []byte(fixture.contents), fixture.mode); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
