@@ -7,7 +7,7 @@ import {
   shortcutDescription,
   shouldShowShortcutManagement,
 } from "./management";
-import type { AggregateStatus, Configuration, Game } from "./types";
+import type { AggregateStatus, Configuration, Game } from "../types";
 
 const emptyConfiguration: Configuration = { version: 1, games: {} };
 const managedConfiguration: Configuration = {

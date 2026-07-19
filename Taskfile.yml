@@ -172,7 +172,7 @@ tasks:
       - npm run build
 
   frontend:visual:
-    desc: Build the Decky frontend with a spoofed QAM readiness fixture
+    desc: Build the Decky frontend with a spoofed QAM or readiness-workspace fixture
     vars:
       FIXTURE: '{{default "hypervisor-ready" .FIXTURE}}'
     cmds:

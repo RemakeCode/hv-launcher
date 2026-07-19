@@ -1,6 +1,9 @@
-import type { AggregateStatus, Check, Configuration, SystemStatus } from './types';
+import type { ProtonDraft } from '../readiness-workspace/readiness-workspace-state';
+import type { AggregateStatus, Check, Configuration, ProtonSelectionResponse, SetupJobSnapshot, SystemStatus } from '../types';
 
-export type VisualFixtureName = AggregateStatus | 'native-intel7' | 'z1-extreme' | 'z1-extreme-native' | '';
+type WorkspaceFixtureName = 'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
+export type VisualFixtureName = AggregateStatus | 'native-intel7' | 'z1-extreme' | 'z1-extreme-native' | WorkspaceFixtureName | '';
+type QAMFixtureName = Exclude<VisualFixtureName, '' | WorkspaceFixtureName>;
 
 export interface QAMVisualFixture {
   configuration: Configuration;
@@ -65,7 +68,7 @@ function status(overrides: Partial<SystemStatus>): SystemStatus {
   };
 }
 
-const fixtures: Record<Exclude<VisualFixtureName, ''>, QAMVisualFixture> = {
+const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
   'native-ready': {
     configuration: emptyConfiguration,
     status: status({
@@ -231,7 +234,7 @@ const fixtures: Record<Exclude<VisualFixtureName, ''>, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
         check('umip', 'UMIP', 'enabled and blocking', false, 'Add clearcpuid=514 (or clearcpuid=umip) to the kernel command line and reboot.'),
         check('emulation-module', 'CPUID module', 'installed module does not match the running kernel', false, 'Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it.'),
-        check('proton', 'Proton', 'no supported build detected', false, "Manually extract a supported LinUwUx Proton build into Steam's compatibilitytools.d directory.")
+        check('proton', 'Proton', 'no supported build detected', false, 'Open Readiness details and setup to install a LinUwUx Proton archive.')
       ]
     })
   },
@@ -286,5 +289,82 @@ const fixtures: Record<Exclude<VisualFixtureName, ''>, QAMVisualFixture> = {
 };
 
 export function getQAMVisualFixture(name: VisualFixtureName = selectedFixture): QAMVisualFixture | undefined {
-  return name ? fixtures[name] : undefined;
+  if (!name) return undefined;
+  if (name === 'proton-success') {
+    const fixture = fixtures['hypervisor-ready'];
+    const tools = ['GE-Proton11-1-LinUwUx', 'cachyos_11.0_20260702-LinUwUx'];
+    return {
+      ...fixture,
+      status: {
+        ...fixture.status,
+        proton: { found: true, tools },
+        checks: fixture.status.checks.map((item) =>
+          item.id === 'proton' ? { ...item, detail: tools.join(', ') } : item
+        )
+      }
+    };
+  }
+  if (name.startsWith('proton-')) return fixtures['setup-required'];
+  return fixtures[name as QAMFixtureName];
+}
+
+const protonSelection: ProtonSelectionResponse = {
+  selectionId: 'X3m5Qn8VisualSelection',
+  expiresAt: '2026-07-18T12:10:00Z',
+  responsibility: "HV Launcher cannot verify this archive's publisher, authenticity, or suitability. Confirm that you sourced and selected the intended archive before installing.",
+  preflight: {
+    fileName: 'cachyos-11.0-LinUwUx.tar.xz',
+    compression: 'xz',
+    compressedBytes: 1642824990,
+    destinations: [
+      { id: 'native', label: 'Steam (native)' },
+      { id: 'flatpak', label: 'Steam (Flatpak)' }
+    ]
+  }
+};
+
+function protonJob(state: SetupJobSnapshot['state']): SetupJobSnapshot {
+  return {
+    id: 'VisualProtonJob',
+    kind: 'proton-install',
+    state,
+    phase: state === 'running' ? 'installing' : state === 'succeeded' ? 'complete' : 'failed',
+    progress: state === 'running' ? 58 : 100,
+    output: state === 'running' ? ['Validating the selected Proton archive'] : [],
+    error: state === 'failed' ? 'The destination became unavailable during installation.' : undefined,
+    result: state === 'succeeded' ? {
+      toolName: 'cachyos_11.0_20260702-LinUwUx',
+      destinationId: 'native',
+      sha256: 'f06a82e15cdd2b49fa8287bd9f8be4ea3d09a9f1cb5566339a3d61c38a5d902e',
+      restartSteam: true
+    } : undefined,
+    startedAt: '2026-07-18T12:00:00Z',
+    finishedAt: state === 'running' ? undefined : '2026-07-18T12:01:00Z'
+  };
+}
+
+export function getReadinessWorkspaceProtonFixture(
+  name: VisualFixtureName = selectedFixture
+): ProtonDraft | undefined {
+  if (!name.startsWith('proton-')) return undefined;
+  const reviewed: ProtonDraft = {
+    stage: 'confirm',
+    archivePath: '/home/deck/Downloads/cachyos-11.0-LinUwUx.tar.xz',
+    selection: protonSelection,
+    destinationId: undefined
+  };
+  switch (name) {
+    case 'proton-missing':
+      return { stage: 'idle' };
+    case 'proton-confirm':
+      return reviewed;
+    case 'proton-installing':
+      return { ...reviewed, stage: 'installing', job: protonJob('running') };
+    case 'proton-success':
+      return { stage: 'idle', lastInstall: protonJob('succeeded').result };
+    case 'proton-failure':
+      return { ...reviewed, stage: 'failure', job: protonJob('failed'), error: protonJob('failed').error };
+    default:
+      return undefined;
+  }
 }

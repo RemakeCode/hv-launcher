@@ -1,4 +1,4 @@
-import { ButtonItem, DialogLabel, Marquee, Navigation, PanelSection, Spinner } from '@decky/ui';
+import { ButtonItem, DialogLabel, Marquee, Navigation, PanelSection } from '@decky/ui';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { IconType } from 'react-icons';
 import {
@@ -17,8 +17,8 @@ import {
   FaTimesCircle,
   FaWineBottle
 } from 'react-icons/fa';
-import { getConfiguration, getStatus } from './api';
-import { readinessError, shouldShowShortcutManagement } from './management';
+import { getConfiguration, getStatus } from '../api';
+import { readinessError, shouldShowShortcutManagement } from '../shortcut-management/management';
 import {
   aggregateReadinessState,
   kvmReadinessState,
@@ -26,12 +26,14 @@ import {
   pathReadinessState,
   ReadinessItem,
   readinessColor
-} from './readiness';
-import { logger } from './shared/logger';
-import type { AggregateStatus, Check, Configuration, SystemStatus } from './types';
-import { getQAMVisualFixture } from './visual-fixtures';
+} from '../readiness/readiness-item';
+import { getQAMVisualFixture } from '../readiness/visual-fixtures';
+import { logger } from '../shared/logger';
+import { LoadingSpinner } from '../shared/loading-spinner';
+import type { AggregateStatus, Check, Configuration, SystemStatus } from '../types';
 
 export const MANAGEMENT_ROUTE = '/hv-launcher/manage';
+export const READINESS_ROUTE = '/hv-launcher/readiness';
 
 const checkIcons: Record<string, IconType> = {
   cpu: FaMicrochip,
@@ -113,7 +115,7 @@ export function ReadinessContent() {
   if (!status || !configuration) {
     return (
       <PanelSection title="System readiness">
-        <div style={{ padding: '10px 0' }}>{error || <Spinner />}</div>
+        <div style={{ padding: '10px 0' }}>{error || <LoadingSpinner />}</div>
         {error && (
           <ButtonItem layout="below" disabled={refreshing} onClick={() => void refresh()}>
             {refreshing ? 'Retrying…' : 'Retry'}
@@ -213,6 +215,15 @@ export function ReadinessContent() {
           Manage shortcuts
         </ButtonItem>
       )}
+      <ButtonItem
+        layout="below"
+        onClick={() => {
+          Navigation.Navigate(READINESS_ROUTE);
+          Navigation.CloseSideMenus();
+        }}
+      >
+        Readiness details and setup
+      </ButtonItem>
       <ButtonItem layout="below" disabled={refreshing} onClick={() => void refresh()}>
         {refreshing ? 'Refreshing…' : 'Refresh status'}
       </ButtonItem>

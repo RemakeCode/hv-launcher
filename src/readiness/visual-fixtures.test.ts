@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getQAMVisualFixture, type VisualFixtureName } from './visual-fixtures';
+import { getQAMVisualFixture, getReadinessWorkspaceProtonFixture, type VisualFixtureName } from './visual-fixtures';
 
 const fixtures: Array<[Exclude<VisualFixtureName, ''>, string]> = [
   ['native-ready', 'native-ready'],
@@ -54,5 +54,29 @@ describe('QAM visual fixtures', () => {
     expect(fixture?.cpu.cpuidFaultFlag).toBe(true);
     expect(fixture?.kernel.minor).toBe(18);
     expect(fixture?.path).toBe('native');
+  });
+
+  it.each([
+    ['proton-missing', 'idle'],
+    ['proton-confirm', 'confirm'],
+    ['proton-installing', 'installing'],
+    ['proton-failure', 'failure']
+  ] as const)('models the %s readiness-workspace process', (name, stage) => {
+    const draft = getReadinessWorkspaceProtonFixture(name);
+    expect(getQAMVisualFixture(name)?.status.status).toBe('setup-required');
+    expect(draft?.stage).toBe(stage);
+  });
+
+  it('models completed Proton setup as reusable management with installed builds', () => {
+    const fixture = getQAMVisualFixture('proton-success');
+    const draft = getReadinessWorkspaceProtonFixture('proton-success');
+
+    expect(fixture?.status.status).toBe('hypervisor-ready');
+    expect(fixture?.status.proton.tools).toEqual([
+      'GE-Proton11-1-LinUwUx',
+      'cachyos_11.0_20260702-LinUwUx'
+    ]);
+    expect(draft?.stage).toBe('idle');
+    expect(draft?.lastInstall?.toolName).toBe('cachyos_11.0_20260702-LinUwUx');
   });
 });

@@ -39,7 +39,11 @@ export interface SystemStatus {
     kvmBusy: boolean;
     controllerState: string;
   };
-  proton: { found: boolean; tools: string[] };
+  proton: {
+    found: boolean;
+    tools: string[];
+    invalid?: Array<{ name: string; detail: string }>;
+  };
   checks: Check[];
 }
 
@@ -81,3 +85,56 @@ export interface RestoreResponse {
 }
 
 export type DisplayState = "idle" | "launching" | "running" | "stopping";
+
+export type ProtonCompression = "gzip" | "xz";
+
+export interface ProtonDestination {
+  id: string;
+  label: string;
+}
+
+export interface ProtonArchivePreflight {
+  fileName: string;
+  compression: ProtonCompression;
+  compressedBytes: number;
+  destinations: ProtonDestination[];
+}
+
+export interface ProtonSelectionResponse {
+  selectionId: string;
+  expiresAt: string;
+  preflight: ProtonArchivePreflight;
+  responsibility: string;
+}
+
+export interface ProtonInstallResult {
+  toolName: string;
+  destinationId: string;
+  sha256: string;
+  restartSteam: boolean;
+}
+
+export type SetupJobState = "running" | "succeeded" | "failed";
+
+export interface SetupJobSnapshot {
+  id: string;
+  kind: string;
+  state: SetupJobState;
+  phase: string;
+  progress: number;
+  output: string[];
+  result?: ProtonInstallResult;
+  error?: string;
+  startedAt: string;
+  finishedAt?: string;
+}
+
+export interface ActiveSetupJob {
+  active: boolean;
+  job?: SetupJobSnapshot;
+}
+
+export interface SetupJobEvent {
+  type: "setup-job";
+  job: SetupJobSnapshot;
+}

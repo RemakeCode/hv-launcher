@@ -4,8 +4,8 @@ import {
   kvmReadinessState,
   managerReadinessState,
   pathReadinessState
-} from './readiness';
-import type { SystemStatus } from './types';
+} from './readiness-item';
+import type { SystemStatus } from '../types';
 
 function modules(overrides: Partial<SystemStatus['modules']> = {}): SystemStatus['modules'] {
   return {
