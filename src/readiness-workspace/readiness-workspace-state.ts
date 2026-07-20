@@ -1,4 +1,11 @@
-import type { Check, ProtonInstallResult, ProtonSelectionResponse, SetupJobSnapshot } from "../types";
+import type {
+  Check,
+  ProtonInstallResult,
+  ProtonSelectionResponse,
+  SetupJobSnapshot,
+  UMIPBootloader,
+  UMIPInspection,
+} from "../types";
 
 export type ProtonFlowStage =
   | "idle"
@@ -20,6 +27,23 @@ export interface ProtonDraft {
 
 export const emptyProtonDraft: ProtonDraft = { stage: "idle" };
 
+export type UMIPFlowStage =
+  | "loading"
+  | "idle"
+  | "applying"
+  | "restart-required"
+  | "failure";
+
+export interface UMIPDraft {
+  stage: UMIPFlowStage;
+  inspection?: UMIPInspection;
+  selected?: UMIPBootloader;
+  job?: SetupJobSnapshot;
+  error?: string;
+}
+
+export const emptyUMIPDraft: UMIPDraft = { stage: "loading" };
+
 const readinessWorkspaceCheckIds = new Set(["umip", "emulation-module", "proton"]);
 
 export type ProtonDraftAction =
@@ -31,6 +55,15 @@ export type ProtonDraftAction =
   | { type: "job-started"; job: SetupJobSnapshot }
   | { type: "job-updated"; job: SetupJobSnapshot }
   | { type: "completion-displayed" }
+  | { type: "failed"; error: string };
+
+export type UMIPDraftAction =
+  | { type: "inspection-loaded"; inspection: UMIPInspection }
+  | { type: "inspection-failed"; error: string }
+  | { type: "bootloader-selected"; bootloader: UMIPBootloader }
+  | { type: "apply-requested" }
+  | { type: "job-started"; job: SetupJobSnapshot }
+  | { type: "job-updated"; job: SetupJobSnapshot }
   | { type: "failed"; error: string };
 
 function protonStageForJob(job: SetupJobSnapshot): ProtonFlowStage {
@@ -79,8 +112,82 @@ export function protonDraftReducer(
       return attachProtonJob(state, action.job);
     case "completion-displayed":
       return state.stage === "completing"
-        ? { stage: "idle", lastInstall: state.job?.result }
+        ? {
+            stage: "idle",
+            lastInstall: state.job?.kind === "proton-install"
+              ? state.job.result as ProtonInstallResult | undefined
+              : undefined,
+          }
         : state;
+    case "failed":
+      return { ...state, stage: "failure", error: action.error };
+  }
+}
+
+function umipStageForInspection(
+  inspection: UMIPInspection,
+  selected?: UMIPBootloader,
+): UMIPFlowStage {
+  const candidate = inspection.candidates.find((item) => item.bootloader === selected);
+  return candidate?.state === "restart-required" ? "restart-required" : "idle";
+}
+
+function attachUMIPJob(state: UMIPDraft, job: SetupJobSnapshot): UMIPDraft {
+  if (job.state === "running") {
+    return { ...state, stage: "applying", job, error: undefined };
+  }
+  if (job.state === "succeeded") {
+    return { ...state, stage: "restart-required", job, error: undefined };
+  }
+  return { ...state, stage: "failure", job, error: job.error ?? "UMIP setup did not complete." };
+}
+
+export function umipDraftReducer(state: UMIPDraft, action: UMIPDraftAction): UMIPDraft {
+  switch (action.type) {
+    case "inspection-loaded": {
+      const inspection = action.inspection;
+      const retainedSelection = inspection.candidates.some((item) => item.bootloader === state.selected)
+        ? state.selected
+        : undefined;
+      const selected = retainedSelection ?? (inspection.selection === "automatic"
+        ? inspection.selected ?? inspection.candidates[0]?.bootloader
+        : undefined);
+      if (state.job?.state === "running") {
+        return { ...state, inspection, selected };
+      }
+      if (state.job?.state === "succeeded") {
+        return { ...state, inspection, selected, stage: "restart-required" };
+      }
+      if (state.stage === "failure") {
+        return { ...state, inspection, selected };
+      }
+      return {
+        ...state,
+        inspection,
+        selected,
+        stage: umipStageForInspection(inspection, selected),
+        error: undefined,
+      };
+    }
+    case "inspection-failed":
+      return { ...state, stage: "failure", error: action.error };
+    case "bootloader-selected":
+      return {
+        ...state,
+        selected: action.bootloader,
+        stage: state.inspection
+          ? umipStageForInspection(state.inspection, action.bootloader)
+          : "idle",
+        error: undefined,
+      };
+    case "apply-requested":
+      return { ...state, stage: "applying", job: undefined, error: undefined };
+    case "job-started":
+      return action.job.kind === "umip-apply" ? attachUMIPJob(state, action.job) : state;
+    case "job-updated":
+      if (action.job.kind !== "umip-apply") return state;
+      if (state.job && state.job.id !== action.job.id && state.job.state === "running") return state;
+      return attachUMIPJob(state, action.job);
     case "failed":
       return { ...state, stage: "failure", error: action.error };
   }

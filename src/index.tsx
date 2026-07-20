@@ -14,11 +14,16 @@ export default definePlugin(() => {
 
   setupEventStore.start((job) => {
     const succeeded = job.state === "succeeded";
+    const umip = job.kind === "umip-apply";
     toaster.toast({
       title: succeeded ? "HV Launcher setup complete" : "HV Launcher setup failed",
       body: succeeded
-        ? "The Proton installation finished. Restart Steam before selecting the new tool."
-        : "The Proton installation did not complete. Open Readiness setup for details.",
+        ? umip
+          ? "The boot configuration was updated. Restart the system to finish disabling UMIP."
+          : "The Proton installation finished. Restart Steam before selecting the new tool."
+        : umip
+          ? "The UMIP configuration did not complete. Open Readiness setup for recovery details."
+          : "The Proton installation did not complete. Open Readiness setup for details.",
       critical: !succeeded,
       playSound: true,
       showToast: true,

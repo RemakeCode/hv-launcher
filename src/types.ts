@@ -114,6 +114,50 @@ export interface ProtonInstallResult {
   restartSteam: boolean;
 }
 
+export type UMIPBootloader = "limine" | "grub";
+export type UMIPSelectionMode = "automatic" | "choice-required" | "manual-only";
+export type UMIPCandidateState = "action-required" | "restart-required" | "configured";
+
+export interface UMIPUpdater {
+  path: string;
+  args: string[];
+}
+
+export interface UMIPCandidate {
+  bootloader: UMIPBootloader;
+  configuration: string;
+  updater: UMIPUpdater;
+  state: UMIPCandidateState;
+  currentValue: string;
+  proposedValue: string;
+  existingArgument?: string;
+  detail: string;
+}
+
+export interface UMIPManualOutcome {
+  bootloader?: UMIPBootloader;
+  reason:
+    | "unsupported-syntax"
+    | "missing-updater"
+    | "conflicting-argument"
+    | "unsupported-bootloader";
+  detail: string;
+}
+
+export interface UMIPInspection {
+  liveUmip: boolean;
+  selection: UMIPSelectionMode;
+  selected?: UMIPBootloader;
+  candidates: UMIPCandidate[];
+  manual: UMIPManualOutcome[];
+}
+
+export interface UMIPApplyResult {
+  bootloader: UMIPBootloader;
+  restartRequired: boolean;
+  backupRetained?: string;
+}
+
 export type SetupJobState = "running" | "succeeded" | "failed";
 
 export interface SetupJobSnapshot {
@@ -123,7 +167,7 @@ export interface SetupJobSnapshot {
   phase: string;
   progress: number;
   output: string[];
-  result?: ProtonInstallResult;
+  result?: ProtonInstallResult | UMIPApplyResult;
   error?: string;
   startedAt: string;
   finishedAt?: string;

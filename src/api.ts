@@ -7,6 +7,8 @@ import type {
   ProtonSelectionResponse,
   SetupJobSnapshot,
   SystemStatus,
+  UMIPBootloader,
+  UMIPInspection,
 } from "./types";
 
 export const BASE_URL = "http://127.0.0.1:42991/v1";
@@ -45,6 +47,17 @@ export const installProtonArchive = (
   selectionId,
   destinationId,
   confirmedSource: true,
+});
+
+export const getUMIPInspection = () =>
+  fetcher.get<UMIPInspection>("/setup/umip");
+
+export const applyUMIPConfiguration = (
+  bootloader: UMIPBootloader,
+  capability: string,
+) => fetcher.post<SetupJobSnapshot>("/setup/umip", {
+  bootloader,
+  capability,
 });
 
 export const getActiveSetupJob = () =>

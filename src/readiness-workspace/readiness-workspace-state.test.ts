@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   emptyProtonDraft,
+  emptyUMIPDraft,
   initialReadinessSelection,
   isFilePickerCancellation,
   isSupportedProtonArchive,
@@ -9,8 +10,13 @@ import {
   readinessPageLink,
   readinessSelectionFromPage,
   readinessWorkspaceChecks,
+  umipDraftReducer,
 } from "./readiness-workspace-state";
-import type { ProtonSelectionResponse, SetupJobSnapshot } from "../types";
+import type {
+  ProtonSelectionResponse,
+  SetupJobSnapshot,
+  UMIPInspection,
+} from "../types";
 
 const selection: ProtonSelectionResponse = {
   selectionId: "selection",
@@ -37,6 +43,36 @@ function job(state: SetupJobSnapshot["state"]): SetupJobSnapshot {
       sha256: "abc123",
       restartSteam: true,
     } : undefined,
+  };
+}
+
+const limineInspection: UMIPInspection = {
+  liveUmip: true,
+  selection: "automatic",
+  selected: "limine",
+  candidates: [{
+    bootloader: "limine",
+    configuration: "/etc/default/limine",
+    updater: { path: "/usr/bin/limine-update", args: [] },
+    state: "action-required",
+    currentValue: "quiet",
+    proposedValue: "quiet clearcpuid=514",
+    detail: "clearcpuid=514 can be added after review.",
+  }],
+  manual: [],
+};
+
+function umipJob(state: SetupJobSnapshot["state"]): SetupJobSnapshot {
+  return {
+    id: "umip-job",
+    kind: "umip-apply",
+    state,
+    phase: state === "running" ? "updating-configuration" : state === "succeeded" ? "complete" : "failed",
+    progress: state === "running" ? 35 : 100,
+    output: [],
+    error: state === "failed" ? "updater failed; configuration was rolled back" : undefined,
+    result: state === "succeeded" ? { bootloader: "limine", restartRequired: true } : undefined,
+    startedAt: "2026-07-19T12:00:00Z",
   };
 }
 
@@ -173,5 +209,70 @@ describe("readiness workspace state", () => {
     expect(isSupportedProtonArchive("a.zip")).toBe(false);
     expect(isFilePickerCancellation(new Error("Picker cancelled"))).toBe(true);
     expect(isFilePickerCancellation(new Error("permission denied"))).toBe(false);
+  });
+
+  it("selects one UMIP candidate without starting a mutation", () => {
+    const state = umipDraftReducer(emptyUMIPDraft, {
+      type: "inspection-loaded",
+      inspection: limineInspection,
+    });
+
+    expect(state.stage).toBe("idle");
+    expect(state.selected).toBe("limine");
+    expect(state.job).toBeUndefined();
+  });
+
+  it("retains the explicit bootloader choice", () => {
+    const choice: UMIPInspection = {
+      ...limineInspection,
+      selection: "choice-required",
+      selected: undefined,
+      candidates: [
+        ...limineInspection.candidates,
+        {
+          bootloader: "grub",
+          configuration: "/etc/default/grub",
+          updater: { path: "/usr/sbin/update-grub", args: [] },
+          state: "action-required",
+          currentValue: "quiet",
+          proposedValue: "quiet clearcpuid=514",
+          detail: "clearcpuid=514 can be added after review.",
+        },
+      ],
+    };
+    let state = umipDraftReducer(emptyUMIPDraft, { type: "inspection-loaded", inspection: choice });
+    expect(state.selected).toBeUndefined();
+    state = umipDraftReducer(state, { type: "bootloader-selected", bootloader: "grub" });
+    expect(state.selected).toBe("grub");
+    expect(state.stage).toBe("idle");
+  });
+
+  it("does not offer the UMIP mutation again while a restart is required", () => {
+    const configured: UMIPInspection = {
+      ...limineInspection,
+      candidates: [{
+        ...limineInspection.candidates[0],
+        state: "restart-required",
+        existingArgument: "clearcpuid=514",
+      }],
+    };
+    const state = umipDraftReducer(emptyUMIPDraft, { type: "inspection-loaded", inspection: configured });
+
+    expect(state.stage).toBe("restart-required");
+  });
+
+  it("preserves terminal UMIP state when job attachment races completion", () => {
+    let state = umipDraftReducer(emptyUMIPDraft, {
+      type: "inspection-loaded",
+      inspection: limineInspection,
+    });
+    state = umipDraftReducer(state, { type: "apply-requested" });
+
+    const succeeded = umipDraftReducer(state, { type: "job-started", job: umipJob("succeeded") });
+    expect(succeeded.stage).toBe("restart-required");
+
+    const failed = umipDraftReducer(state, { type: "job-started", job: umipJob("failed") });
+    expect(failed.stage).toBe("failure");
+    expect(failed.error).toContain("rolled back");
   });
 });
