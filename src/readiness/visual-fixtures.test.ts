@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { getQAMVisualFixture, getReadinessWorkspaceProtonFixture, type VisualFixtureName } from './visual-fixtures';
+import {
+  getQAMVisualFixture,
+  getReadinessWorkspaceProtonFixture,
+  getReadinessWorkspaceUMIPFixture,
+  type VisualFixtureName
+} from './visual-fixtures';
 
 const fixtures: Array<[Exclude<VisualFixtureName, ''>, string]> = [
   ['native-ready', 'native-ready'],
@@ -78,5 +83,29 @@ describe('QAM visual fixtures', () => {
     ]);
     expect(draft?.stage).toBe('idle');
     expect(draft?.lastInstall?.toolName).toBe('cachyos_11.0_20260702-LinUwUx');
+  });
+
+  it.each([
+    ['umip-automatic', 'idle'],
+    ['umip-choice', 'idle'],
+    ['umip-manual', 'idle'],
+    ['umip-existing', 'restart-required'],
+    ['umip-success', 'restart-required'],
+    ['umip-failure', 'failure']
+  ] as const)('models the %s readiness-workspace process', (name, stage) => {
+    const draft = getReadinessWorkspaceUMIPFixture(name);
+
+    expect(getQAMVisualFixture(name)?.status.cpu.umipPresent).toBe(true);
+    expect(draft?.stage).toBe(stage);
+  });
+
+  it('models explicit dual-bootloader choice and manual-only guidance', () => {
+    const choice = getReadinessWorkspaceUMIPFixture('umip-choice');
+    const manual = getReadinessWorkspaceUMIPFixture('umip-manual');
+
+    expect(choice?.inspection?.selection).toBe('choice-required');
+    expect(choice?.inspection?.candidates.map((candidate) => candidate.bootloader)).toEqual(['limine', 'grub']);
+    expect(manual?.inspection?.selection).toBe('manual-only');
+    expect(manual?.inspection?.manual[0].detail).toContain('manually');
   });
 });

@@ -1,7 +1,25 @@
-import type { ProtonDraft } from '../readiness-workspace/readiness-workspace-state';
-import type { AggregateStatus, Check, Configuration, ProtonSelectionResponse, SetupJobSnapshot, SystemStatus } from '../types';
+import type { ProtonDraft, UMIPDraft } from '../readiness-workspace/readiness-workspace-state';
+import type {
+  AggregateStatus,
+  Check,
+  Configuration,
+  ProtonInstallResult,
+  ProtonSelectionResponse,
+  SetupJobSnapshot,
+  SystemStatus,
+  UMIPCandidate,
+  UMIPInspection
+} from '../types';
 
-type WorkspaceFixtureName = 'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
+type ProtonWorkspaceFixtureName = 'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
+type UMIPWorkspaceFixtureName =
+  | 'umip-automatic'
+  | 'umip-choice'
+  | 'umip-manual'
+  | 'umip-existing'
+  | 'umip-success'
+  | 'umip-failure';
+type WorkspaceFixtureName = ProtonWorkspaceFixtureName | UMIPWorkspaceFixtureName;
 export type VisualFixtureName = AggregateStatus | 'native-intel7' | 'z1-extreme' | 'z1-extreme-native' | WorkspaceFixtureName | '';
 type QAMFixtureName = Exclude<VisualFixtureName, '' | WorkspaceFixtureName>;
 
@@ -304,7 +322,7 @@ export function getQAMVisualFixture(name: VisualFixtureName = selectedFixture): 
       }
     };
   }
-  if (name.startsWith('proton-')) return fixtures['setup-required'];
+  if (name.startsWith('proton-') || name.startsWith('umip-')) return fixtures['setup-required'];
   return fixtures[name as QAMFixtureName];
 }
 
@@ -343,6 +361,13 @@ function protonJob(state: SetupJobSnapshot['state']): SetupJobSnapshot {
   };
 }
 
+const completedProtonInstall: ProtonInstallResult = {
+  toolName: 'cachyos_11.0_20260702-LinUwUx',
+  destinationId: 'native',
+  sha256: 'f06a82e15cdd2b49fa8287bd9f8be4ea3d09a9f1cb5566339a3d61c38a5d902e',
+  restartSteam: true
+};
+
 export function getReadinessWorkspaceProtonFixture(
   name: VisualFixtureName = selectedFixture
 ): ProtonDraft | undefined {
@@ -361,9 +386,126 @@ export function getReadinessWorkspaceProtonFixture(
     case 'proton-installing':
       return { ...reviewed, stage: 'installing', job: protonJob('running') };
     case 'proton-success':
-      return { stage: 'idle', lastInstall: protonJob('succeeded').result };
+      return { stage: 'idle', lastInstall: completedProtonInstall };
     case 'proton-failure':
       return { ...reviewed, stage: 'failure', job: protonJob('failed'), error: protonJob('failed').error };
+    default:
+      return undefined;
+  }
+}
+
+const limineCandidate: UMIPCandidate = {
+  bootloader: 'limine',
+  configuration: '/etc/default/limine',
+  updater: { path: '/usr/bin/limine-update', args: [] },
+  state: 'action-required',
+  currentValue: 'quiet splash',
+  proposedValue: 'quiet splash clearcpuid=514',
+  detail: 'clearcpuid=514 can be added after review.'
+};
+
+const grubCandidate: UMIPCandidate = {
+  bootloader: 'grub',
+  configuration: '/etc/default/grub',
+  updater: { path: '/usr/bin/grub-mkconfig', args: ['-o', '/boot/grub/grub.cfg'] },
+  state: 'action-required',
+  currentValue: 'quiet splash',
+  proposedValue: 'quiet splash clearcpuid=514',
+  detail: 'clearcpuid=514 can be added after review.'
+};
+
+const automaticUMIPInspection: UMIPInspection = {
+  liveUmip: true,
+  selection: 'automatic',
+  selected: 'limine',
+  candidates: [limineCandidate],
+  manual: []
+};
+
+function umipJob(state: SetupJobSnapshot['state']): SetupJobSnapshot {
+  return {
+    id: 'VisualUMIPJob',
+    kind: 'umip-apply',
+    state,
+    phase: state === 'running' ? 'regenerating-boot-configuration' : state === 'succeeded' ? 'complete' : 'failed',
+    progress: state === 'running' ? 65 : 100,
+    output: state === 'running' ? ['Updating bootloader configuration'] : [],
+    error: state === 'failed' ? 'The bootloader updater failed and the original configuration was restored.' : undefined,
+    result: state === 'succeeded' ? { bootloader: 'limine', restartRequired: true } : undefined,
+    startedAt: '2026-07-19T12:00:00Z',
+    finishedAt: state === 'running' ? undefined : '2026-07-19T12:00:04Z'
+  };
+}
+
+export function getReadinessWorkspaceUMIPFixture(
+  name: VisualFixtureName = selectedFixture
+): UMIPDraft | undefined {
+  if (!name) return undefined;
+  if (!name.startsWith('umip-')) {
+    const visualStatus = getQAMVisualFixture(name)?.status;
+    if (!visualStatus?.checks.some((item) => item.id === 'umip')) return undefined;
+    return visualStatus.cpu.umipPresent
+      ? { stage: 'idle', inspection: automaticUMIPInspection, selected: 'limine' }
+      : {
+          stage: 'idle',
+          inspection: { liveUmip: false, selection: 'manual-only', candidates: [], manual: [] }
+        };
+  }
+
+  switch (name) {
+    case 'umip-automatic':
+      return { stage: 'idle', inspection: automaticUMIPInspection, selected: 'limine' };
+    case 'umip-choice':
+      return {
+        stage: 'idle',
+        inspection: {
+          liveUmip: true,
+          selection: 'choice-required',
+          candidates: [limineCandidate, grubCandidate],
+          manual: []
+        }
+      };
+    case 'umip-manual':
+      return {
+        stage: 'idle',
+        inspection: {
+          liveUmip: true,
+          selection: 'manual-only',
+          candidates: [],
+          manual: [{
+            reason: 'unsupported-bootloader',
+            detail: 'No supported Limine or GRUB configuration was found; add clearcpuid=514 manually.'
+          }]
+        }
+      };
+    case 'umip-existing': {
+      const configured: UMIPCandidate = {
+        ...limineCandidate,
+        state: 'restart-required',
+        existingArgument: 'clearcpuid=514',
+        detail: 'The UMIP argument is already configured; restart the system to apply it.'
+      };
+      return {
+        stage: 'restart-required',
+        inspection: { ...automaticUMIPInspection, candidates: [configured] },
+        selected: 'limine'
+      };
+    }
+    case 'umip-success':
+      return {
+        stage: 'restart-required',
+        inspection: automaticUMIPInspection,
+        selected: 'limine',
+        job: umipJob('succeeded')
+      };
+    case 'umip-failure':
+      return {
+        stage: 'failure',
+        inspection: automaticUMIPInspection,
+        selected: 'limine',
+        job: umipJob('failed'),
+        error: umipJob('failed').error
+      };
     default:
       return undefined;
   }
