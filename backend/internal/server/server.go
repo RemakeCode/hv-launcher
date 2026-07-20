@@ -13,12 +13,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"hv-launcher/internal/auth"
 	"hv-launcher/internal/config"
+	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
 	"hv-launcher/internal/manage"
 	"hv-launcher/internal/proton"
 	"hv-launcher/internal/system"
+	"hv-launcher/internal/umip"
 )
 
 const (
@@ -38,6 +41,10 @@ type Options struct {
 	Proton           proton.Operator
 	ProtonSelections *proton.SelectionStore
 	Jobs             *jobs.Coordinator
+	UMIP             *umip.Inspector
+	Capabilities     *auth.Verifier
+	ModuleInspector  *cpuidmodule.Inspector
+	ModulePreflight  *cpuidmodule.PreflightInspector
 }
 
 type Service struct {
@@ -49,7 +56,8 @@ type Service struct {
 
 func New(options Options) (*Service, error) {
 	if options.Config == nil || options.Inspector == nil || options.Manager == nil || options.Controller == nil ||
-		options.Proton == nil || options.ProtonSelections == nil || options.Jobs == nil {
+		options.Proton == nil || options.ProtonSelections == nil || options.Jobs == nil || options.UMIP == nil ||
+		options.Capabilities == nil || options.ModuleInspector == nil || options.ModulePreflight == nil {
 		return nil, errors.New("configuration, inspector, manager, controller, and setup services are required")
 	}
 	if err := validateLoopbackAddress(options.ListenAddress); err != nil {
@@ -88,6 +96,9 @@ func (s *Service) routes() http.Handler {
 		api.Delete("/sessions/{sessionID}", s.endSession)
 		api.Post("/setup/proton/preflight", s.preflightProtonArchive)
 		api.Post("/setup/proton/install", s.installProtonArchive)
+		api.Get("/setup/umip", s.inspectUMIP)
+		api.Post("/setup/umip", s.applyUMIP)
+		api.Post("/setup/module/preflight", s.preflightModuleArchive)
 		api.Get("/setup/jobs/active", s.activeSetupJob)
 		api.Get("/setup/jobs/{jobID}", s.setupJob)
 		api.Get("/setup/events", s.setupEvents)
