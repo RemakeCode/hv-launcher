@@ -13,13 +13,16 @@ import (
 	"sync"
 	"testing"
 
+	"hv-launcher/internal/auth"
 	"hv-launcher/internal/config"
+	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
 	"hv-launcher/internal/manage"
 	"hv-launcher/internal/model"
 	"hv-launcher/internal/proton"
 	"hv-launcher/internal/system"
+	"hv-launcher/internal/umip"
 )
 
 type testHost struct {
@@ -88,16 +91,39 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 		CPUInfo: cpu, KernelRelease: kernel, ModulesRoot: modules, SteamRoots: []string{steamRoot},
 	}}
 	manager := &manage.Manager{Store: store, WrapperPath: "/home/deck/.local/share/hv-launcher/hv-launcher-wrapper"}
+	capabilities, err := auth.NewVerifier(testSetupSecret())
+	if err != nil {
+		t.Fatal(err)
+	}
+	umipInspector := umip.NewInspector(umip.Paths{
+		LimineConfiguration: filepath.Join(root, "etc", "default", "limine"),
+		GRUBConfiguration:   filepath.Join(root, "etc", "default", "grub"),
+		GRUBOutput:          filepath.Join(root, "boot", "grub", "grub.cfg"),
+		SystemdEntries:      filepath.Join(root, "boot", "loader", "entries"),
+		LimineUpdaters:      []string{filepath.Join(root, "usr", "bin", "limine-update")},
+		UpdateGRUB:          []string{filepath.Join(root, "usr", "sbin", "update-grub")},
+		GRUBMkconfig:        []string{filepath.Join(root, "usr", "bin", "grub-mkconfig")},
+		RecoveryDirectory:   filepath.Join(root, "var", "lib", "hv-launcher", "recovery"),
+	})
+	umipInspector.Runner = host
 	service, err := New(Options{
 		ListenAddress: "127.0.0.1:42991", Config: store, Inspector: inspector, Manager: manager, Controller: controller,
 		ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc"),
 		Proton:           proton.NewInstaller(root),
 		ProtonSelections: proton.NewSelectionStore(), Jobs: jobs.NewCoordinator(),
+		UMIP:            umipInspector,
+		Capabilities:    capabilities,
+		ModuleInspector: cpuidmodule.NewInspector(),
+		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return service, root, store, controller
+}
+
+func testSetupSecret() []byte {
+	return bytes.Repeat([]byte{0x42}, auth.SecretBytes)
 }
 
 func TestHandlerRoutesAndStrictRequests(t *testing.T) {

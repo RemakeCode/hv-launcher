@@ -13,7 +13,9 @@ import (
 	"syscall"
 	"time"
 
+	"hv-launcher/internal/auth"
 	"hv-launcher/internal/config"
+	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
 	backendlogger "hv-launcher/internal/logger"
@@ -22,6 +24,7 @@ import (
 	"hv-launcher/internal/server"
 	"hv-launcher/internal/steam"
 	"hv-launcher/internal/system"
+	"hv-launcher/internal/umip"
 	"hv-launcher/internal/wrapper"
 )
 
@@ -56,6 +59,10 @@ func run(args []string) error {
 }
 
 func serve() error {
+	capabilities, err := auth.LoadEnvironment()
+	if err != nil {
+		return fmt.Errorf("configure privileged setup authorization: %w", err)
+	}
 	runtimeDir := os.Getenv("DECKY_PLUGIN_RUNTIME_DIR")
 	userHome := os.Getenv("DECKY_USER_HOME")
 	if runtimeDir == "" || userHome == "" {
@@ -124,6 +131,9 @@ func serve() error {
 		Logger:           logger,
 		Proton:           protonWorker,
 		ProtonSelections: proton.NewSelectionStore(), Jobs: jobs.NewCoordinator(),
+		UMIP: umip.NewInspector(umip.DefaultPaths()), Capabilities: capabilities,
+		ModuleInspector: cpuidmodule.NewInspector(),
+		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
 	})
 	if err != nil {
 		return err
@@ -146,7 +156,7 @@ func runWrapped(args []string) error {
 		return errors.New("--app-id is required")
 	}
 	if len(command) == 0 {
-		return errors.New("original command is required after --")
+		return errors.New("original command is required after ")
 	}
 	ctx := context.Background()
 	return wrapper.Run(ctx, wrapper.Options{
