@@ -44,15 +44,17 @@ Once installed, open HV Launcher in the Quick Access Menu to check whether your 
 
 HV Launcher detects the appropriate method and shows it in the readiness panel; you do not need to choose one yourself.
 
-### Manual prerequisites
+### Readiness setup
 
-The readiness panel checks these requirements and explains anything that needs attention:
+The Readiness details and setup page guides the supported setup steps:
 
-- If UMIP must be disabled, add `clearcpuid=514` (or `clearcpuid=umip`) to the kernel command line and reboot.
-- If the CPUID module is required, install `cpuid_fault_emulation` for the currently running kernel. Its build tools and kernel headers must already be available on the system.
-- If Secure Boot is enabled, approve the module signing key when required by your Linux distribution.
+- Proton: choose the archive you obtained, review the Steam installation, and confirm the source before installing. HV Launcher checks the archive structure but cannot prove where it came from. Existing Proton folders are never overwritten. Restart Steam after a successful install so it can discover the new tool.
+- UMIP: supported Limine and GRUB configurations can be updated after confirmation. The change takes effect only after a reboot, and the readiness check remains blocked until the running system reports UMIP disabled. Unsupported bootloaders require manual setup. HV Launcher does not automatically undo a bootloader change.
+- CPUID module: choose the `cpuid_fault_emulation` ZIP you obtained and review the exact host dependency transaction, if one is available. The module is built for the running kernel through DKMS. If that module/version is already registered, HV Launcher stops without replacing it. DKMS executes the reviewed `Makefile` as root, so continue only when you trust the source. Secure Boot or kernel lockdown may still require manual signing or MOK enrollment.
 
-**HV Launcher checks these items but does not install or change them for you.**
+Supported mutable package families are CachyOS/Arch, Debian/Ubuntu/Mint, and Fedora/Nobara. Immutable or other distributions receive manual guidance instead of an automatic package transaction.
+
+**For systems outside the supported guided paths, HV Launcher checks these items but does not install or change them for you.**
 
 ### Stored data
 
@@ -96,6 +98,10 @@ If HV Launcher is unavailable, the shortcut still runs its original command with
 
 HV Launcher never stops virtual machines. It records which module changes it made so it can safely restore them after a game or restart. If it cannot determine who made a change, it reports that recovery is required instead of changing the system. It also leaves CPUID emulation alone when it was already active before HV Launcher started.
 
+### Local setup boundary
+
+Setup requests stay on the device and use fixed operations. Proton archive work runs with the Decky user's permissions. Bootloader, package, and DKMS changes require an explicit one-use confirmation from the plugin and cannot be turned into arbitrary commands or module names by a local request. Structural archive checks improve safety but do not replace trusting the source you selected.
+
 ### Development
 
 Build requirements are Task, Go 1.23+, Node.js, and npm. Air is only required for the live Linux development workflow described below.
@@ -126,3 +132,5 @@ task deploy
 ```
 
 Available fixtures are `native-ready`, `native-intel7`, `z1-extreme`, `z1-extreme-native`, `hypervisor-ready`, `setup-required`, `recovery-required`, and `unsupported`. The fixture affects only QAM status and configuration requests; shortcut management continues to use the backend. Run `task frontend` (or any normal build) and deploy again to disable the fixture.
+
+Readiness workspace process fixtures are also available when building with `FIXTURE=proton-confirm`, `FIXTURE=proton-installing`, `FIXTURE=proton-success`, `FIXTURE=umip-choice`, `FIXTURE=umip-existing`, `FIXTURE=module-review`, `FIXTURE=module-installing`, `FIXTURE=module-success`, `FIXTURE=module-signing`, `FIXTURE=module-failure`, or `FIXTURE=module-manual`.
