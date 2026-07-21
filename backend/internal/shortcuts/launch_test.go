@@ -1,4 +1,4 @@
-package manage
+package shortcuts
 
 import (
 	"errors"

@@ -19,9 +19,9 @@ import (
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
 	backendlogger "hv-launcher/internal/logger"
-	"hv-launcher/internal/manage"
 	"hv-launcher/internal/proton"
 	"hv-launcher/internal/server"
+	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/steam"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
@@ -137,7 +137,7 @@ func serveBackend() error {
 		ListenAddress:   defaultListenAddress,
 		Config:          store,
 		Inspector:       system.NewInspector(userHome, runtimeDir),
-		Manager:         &manage.Manager{Store: store, WrapperPath: wrapperPath},
+		Manager:         &shortcuts.Manager{Store: store, WrapperPath: wrapperPath},
 		Controller:      controller,
 		Logger:          logger,
 		Proton:          protonWorker,

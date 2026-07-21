@@ -18,9 +18,9 @@ import (
 	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
-	"hv-launcher/internal/manage"
 	"hv-launcher/internal/model"
 	"hv-launcher/internal/proton"
+	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
 )
@@ -90,7 +90,7 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	inspector := &system.Inspector{Reader: system.OSReader{}, Runner: host, Paths: system.Paths{
 		CPUInfo: cpu, KernelRelease: kernel, ModulesRoot: modules, SteamRoots: []string{steamRoot},
 	}}
-	manager := &manage.Manager{Store: store, WrapperPath: "/home/deck/.local/share/hv-launcher/hv-launcher-wrapper"}
+	manager := &shortcuts.Manager{Store: store, WrapperPath: "/home/deck/.local/share/hv-launcher/hv-launcher-wrapper"}
 	capabilities, err := auth.NewVerifier(testSetupSecret())
 	if err != nil {
 		t.Fatal(err)

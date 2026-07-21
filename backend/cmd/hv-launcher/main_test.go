@@ -32,7 +32,7 @@ func TestServeSubcommandIsNotExposed(t *testing.T) {
 
 func TestRunWrappedRequiresCommandAfterSeparator(t *testing.T) {
 	err := run([]string{"run", "--app-id", "1", "--"})
-	if err == nil || err.Error() != "original command is required after --" {
+	if err == nil || err.Error() != "original command is required after '--'" {
 		t.Fatalf("missing wrapped command returned %v", err)
 	}
 }
