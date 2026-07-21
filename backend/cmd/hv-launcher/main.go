@@ -22,7 +22,7 @@ import (
 	"hv-launcher/internal/proton"
 	"hv-launcher/internal/server"
 	"hv-launcher/internal/shortcuts"
-	"hv-launcher/internal/steam"
+	"hv-launcher/internal/steamprocess"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
 	"hv-launcher/internal/wrapper"
@@ -163,7 +163,7 @@ func runningManagedShortcuts(store *config.Store, reader system.Reader) map[stri
 	}
 
 	running := make(map[string]bool)
-	for _, id := range steam.ResolveRunningShortcutIDs(reader, "/proc", enabled) {
+	for _, id := range steamprocess.ResolveRunningShortcutIDs(reader, "/proc", enabled) {
 		running[id] = true
 	}
 	return running

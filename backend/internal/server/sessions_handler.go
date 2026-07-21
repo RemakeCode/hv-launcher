@@ -7,7 +7,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/model"
-	"hv-launcher/internal/steam"
+	"hv-launcher/internal/steamprocess"
 )
 
 func (s *Service) startSession(w http.ResponseWriter, r *http.Request) {
@@ -61,7 +61,7 @@ func (s *Service) lifetime(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if request.AppID == "0" {
-		ids := steam.ResolveRunningShortcutIDs(s.options.ProcessReader, s.options.ProcRoot, s.enabledIDs())
+		ids := steamprocess.ResolveRunningShortcutIDs(s.options.ProcessReader, s.options.ProcRoot, s.enabledIDs())
 		if len(ids) != 1 {
 			writeJSON(w, http.StatusAccepted, map[string]string{"status": "unresolved"})
 			return
