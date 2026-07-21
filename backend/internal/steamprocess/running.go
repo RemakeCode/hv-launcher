@@ -1,4 +1,4 @@
-package steam
+package steamprocess
 
 import (
 	"path/filepath"
