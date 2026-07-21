@@ -44,7 +44,7 @@ func main() {
 
 func run(args []string) error {
 	if len(args) == 0 {
-		return serve()
+		return serveBackend()
 	}
 	switch args[0] {
 	case "run":
@@ -58,16 +58,21 @@ func run(args []string) error {
 	}
 }
 
-func serve() error {
+func serveBackend() error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	capabilities, err := auth.LoadEnvironment()
 	if err != nil {
 		return fmt.Errorf("configure privileged setup authorization: %w", err)
 	}
+
 	runtimeDir := os.Getenv("DECKY_PLUGIN_RUNTIME_DIR")
 	userHome := os.Getenv("DECKY_USER_HOME")
 	if runtimeDir == "" || userHome == "" {
 		return errors.New("DECKY_PLUGIN_RUNTIME_DIR and DECKY_USER_HOME are required")
 	}
+
 	userInfo, err := os.Stat(userHome)
 	if err != nil {
 		return fmt.Errorf("inspect Decky user home: %w", err)
@@ -76,12 +81,16 @@ func serve() error {
 	if !ok {
 		return errors.New("Decky user ownership is unavailable")
 	}
+
 	logger := slog.Default()
+	reader := system.OSReader{}
 	logger.Info("backend starting", "listen_address", defaultListenAddress, "effective_uid", os.Geteuid())
+
 	dataDir, err := config.DataDir(userHome, os.Getenv("XDG_DATA_HOME"))
 	if err != nil {
 		return fmt.Errorf("resolve configuration directory: %w", err)
 	}
+
 	store, err := config.Open(dataDir)
 	if err != nil {
 		return fmt.Errorf("open configuration: %w", err)
@@ -92,55 +101,72 @@ func serve() error {
 	if err != nil {
 		return err
 	}
+
 	protonWorker, err := proton.NewWorkerClient(executable, userHome, int(userStat.Uid), int(userStat.Gid))
 	if err != nil {
 		return fmt.Errorf("configure unprivileged Proton worker: %w", err)
 	}
+
 	wrapperPath, err := wrapper.Install(executable, userHome)
 	if err != nil {
 		return fmt.Errorf("install persistent wrapper: %w", err)
 	}
+
 	kernelData, err := os.ReadFile("/proc/sys/kernel/osrelease")
 	if err != nil {
 		return fmt.Errorf("read kernel release: %w", err)
 	}
-	moduleState := hypervisor.SysModuleState{Reader: system.OSReader{}, Root: "/sys/module"}
+
+	moduleState := hypervisor.SysModuleState{Reader: reader, Root: "/sys/module"}
 	controller, err := hypervisor.New(hypervisor.Options{
-		Runner: hypervisor.ExecRunner{}, Modules: moduleState,
-		Journal: hypervisor.NewFileJournal(runtimeDir), KernelRelease: string(bytes.TrimSpace(kernelData)), Logger: logger,
+		Runner:        hypervisor.ExecRunner{},
+		Modules:       moduleState,
+		Journal:       hypervisor.NewFileJournal(runtimeDir),
+		KernelRelease: string(bytes.TrimSpace(kernelData)),
+		Logger:        logger,
 	})
 	if err != nil {
 		return err
 	}
-	enabled := map[string]bool{}
-	for id := range store.Snapshot().Games {
-		enabled[id] = true
-	}
-	runningIDs := steam.ResolveRunningShortcutIDs(system.OSReader{}, "/proc", enabled)
-	running := map[string]bool{}
-	for _, id := range runningIDs {
-		running[id] = true
-	}
-	if err := controller.Reconcile(context.Background(), running); err != nil && !errors.Is(err, hypervisor.ErrRecoveryRequired) {
+
+	if err := controller.Reconcile(ctx, runningManagedShortcuts(store, reader)); err != nil && !errors.Is(err, hypervisor.ErrRecoveryRequired) {
 		return fmt.Errorf("reconcile prior transition: %w", err)
 	}
+
 	svc, err := server.New(server.Options{
-		ListenAddress: defaultListenAddress, Config: store,
-		Inspector: system.NewInspector(userHome, runtimeDir),
-		Manager:   &manage.Manager{Store: store, WrapperPath: wrapperPath}, Controller: controller,
-		Logger: logger,
-		Proton: protonWorker, Jobs: jobs.NewCoordinator(),
-		UMIP: umip.NewInspector(umip.DefaultPaths()), Capabilities: capabilities,
+		ListenAddress:   defaultListenAddress,
+		Config:          store,
+		Inspector:       system.NewInspector(userHome, runtimeDir),
+		Manager:         &manage.Manager{Store: store, WrapperPath: wrapperPath},
+		Controller:      controller,
+		Logger:          logger,
+		Proton:          protonWorker,
+		Jobs:            jobs.NewCoordinator(),
+		UMIP:            umip.NewInspector(umip.DefaultPaths()),
+		Capabilities:    capabilities,
 		ModuleInspector: cpuidmodule.NewInspector(),
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
 	})
 	if err != nil {
 		return err
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
+
 	logger.Info("backend ready", "controller_state", controller.State(), "managed_shortcuts", len(store.Snapshot().Games))
 	return svc.Serve(ctx)
+}
+
+func runningManagedShortcuts(store *config.Store, reader system.Reader) map[string]bool {
+	games := store.Snapshot().Games
+	enabled := make(map[string]bool, len(games))
+	for id := range games {
+		enabled[id] = true
+	}
+
+	running := make(map[string]bool)
+	for _, id := range steam.ResolveRunningShortcutIDs(reader, "/proc", enabled) {
+		running[id] = true
+	}
+	return running
 }
 
 func runWrapped(args []string) error {
@@ -150,13 +176,15 @@ func runWrapped(args []string) error {
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
+
 	command := flags.Args()
 	if *appID == "" {
 		return errors.New("--app-id is required")
 	}
 	if len(command) == 0 {
-		return errors.New("original command is required after ")
+		return errors.New("original command is required after '--'")
 	}
+
 	ctx := context.Background()
 	return wrapper.Run(ctx, wrapper.Options{
 		AppID:       *appID,
