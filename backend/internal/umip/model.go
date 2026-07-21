@@ -8,7 +8,6 @@ var (
 	ErrUnsupportedBootloader = errors.New("unsupported bootloader")
 	ErrCandidateUnavailable  = errors.New("bootloader candidate is unavailable")
 	ErrNoChangeRequired      = errors.New("UMIP boot configuration does not need changing")
-	ErrConfigurationChanged  = errors.New("UMIP configuration changed during update")
 )
 
 type Bootloader string

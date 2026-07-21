@@ -15,11 +15,6 @@ import (
 	"strings"
 )
 
-type configurationSnapshot struct {
-	data []byte
-	info os.FileInfo
-}
-
 func (i *Inspector) Apply(ctx context.Context, bootloader Bootloader, progress ProgressFunc) (ApplyResult, error) {
 	if i.Runner == nil {
 		return ApplyResult{}, errors.New("bootloader updater runner is unavailable")
@@ -29,34 +24,29 @@ func (i *Inspector) Apply(ctx context.Context, bootloader Bootloader, progress P
 		return ApplyResult{}, err
 	}
 	reportProgress(progress, "validating", 5, "Validating the reviewed boot configuration")
-	snapshot, err := readConfigurationSnapshot(configuration)
+	original, err := readConfigurationData(configuration)
 	if err != nil {
 		return ApplyResult{}, err
 	}
-	replacement, err := buildReplacement(bootloader, snapshot.data)
+	replacement, err := buildReplacement(bootloader, original)
 	if err != nil {
 		return ApplyResult{}, err
 	}
 
 	reportProgress(progress, "backing-up", 15, "Saving a private recovery copy")
-	backup, err := createRecoveryBackup(i.Paths.RecoveryDirectory, bootloader, snapshot.data)
+	backup, err := createRecoveryBackup(i.Paths.RecoveryDirectory, bootloader, original)
 	if err != nil {
 		return ApplyResult{}, err
 	}
 
-	keepBackup := true
-	defer func() {
-		if !keepBackup {
-			_ = removeRecoveryBackup(backup)
-		}
-	}()
-
 	reportProgress(progress, "updating-configuration", 35, "Applying the reviewed UMIP argument")
-	if err := writeConfiguration(configuration, replacement, snapshot.info); err != nil {
-		if restoreErr := writeConfiguration(configuration, snapshot.data, snapshot.info); restoreErr != nil {
+	if err := writeConfiguration(configuration, replacement); err != nil {
+		if restoreErr := writeConfiguration(configuration, original); restoreErr != nil {
 			return ApplyResult{}, recoveryError(err, backup, fmt.Errorf("restore original configuration: %w", restoreErr))
 		}
-		keepBackup = false
+		if removeErr := removeRecoveryBackup(backup); removeErr != nil {
+			return ApplyResult{}, recoveryError(err, backup, fmt.Errorf("remove recovery backup: %w", removeErr))
+		}
 		return ApplyResult{}, fmt.Errorf("configuration update failed and was rolled back successfully: %w", err)
 	}
 
@@ -67,14 +57,12 @@ func (i *Inspector) Apply(ctx context.Context, bootloader Bootloader, progress P
 		result := ApplyResult{Bootloader: bootloader, RestartRequired: true}
 		if err := removeRecoveryBackup(backup); err != nil {
 			result.BackupRetained = backup
-		} else {
-			keepBackup = false
 		}
 		return result, nil
 	}
 
 	reportProgress(progress, "rolling-back", 75, "Bootloader update failed; restoring the original configuration")
-	if err := writeConfiguration(configuration, snapshot.data, snapshot.info); err != nil {
+	if err := writeConfiguration(configuration, original); err != nil {
 		return ApplyResult{}, recoveryError(updateErr, backup, fmt.Errorf("restore original configuration: %w", err))
 	}
 
@@ -88,7 +76,6 @@ func (i *Inspector) Apply(ctx context.Context, bootloader Bootloader, progress P
 	if err := removeRecoveryBackup(backup); err != nil {
 		return ApplyResult{}, fmt.Errorf("bootloader update failed and was rolled back successfully; recovery backup remains at %s: %w", backup, updateErr)
 	}
-	keepBackup = false
 	return ApplyResult{}, fmt.Errorf("bootloader update failed and was rolled back successfully: %w", updateErr)
 }
 
@@ -205,79 +192,51 @@ func (i *Inspector) selectedTargets(bootloader Bootloader) (string, Updater, err
 	}
 }
 
-func readConfigurationSnapshot(path string) (configurationSnapshot, error) {
-	initial, err := os.Stat(path)
-	if err != nil {
-		return configurationSnapshot{}, fmt.Errorf("inspect trusted configuration %s: %w", path, err)
-	}
-
-	if err := validateConfigurationInfo(path, initial); err != nil {
-		return configurationSnapshot{}, err
-	}
+func readConfigurationData(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return configurationSnapshot{}, fmt.Errorf("open trusted configuration %s: %w", path, err)
+		return nil, err
 	}
 
 	defer file.Close()
-	opened, err := file.Stat()
+	info, err := file.Stat()
 	if err != nil {
-		return configurationSnapshot{}, fmt.Errorf("inspect opened configuration %s: %w", path, err)
+		return nil, fmt.Errorf("inspect configuration %s: %w", path, err)
+	}
+	if !info.Mode().IsRegular() {
+		return nil, fmt.Errorf("%s must be a regular file", path)
+	}
+	if info.Size() > MaxConfigurationBytes {
+		return nil, fmt.Errorf("%s exceeds the %d-byte inspection limit", path, MaxConfigurationBytes)
 	}
 
-	if !os.SameFile(initial, opened) {
-		return configurationSnapshot{}, ErrConfigurationChanged
-	}
-	if err := validateConfigurationInfo(path, opened); err != nil {
-		return configurationSnapshot{}, err
-	}
 	data, err := io.ReadAll(io.LimitReader(file, MaxConfigurationBytes+1))
 	if err != nil {
-		return configurationSnapshot{}, fmt.Errorf("read trusted configuration %s: %w", path, err)
+		return nil, fmt.Errorf("read configuration %s: %w", path, err)
 	}
 
 	if int64(len(data)) > MaxConfigurationBytes {
-		return configurationSnapshot{}, fmt.Errorf("%s exceeds the %d-byte inspection limit", path, MaxConfigurationBytes)
+		return nil, fmt.Errorf("%s exceeds the %d-byte inspection limit", path, MaxConfigurationBytes)
 	}
-	return configurationSnapshot{data: data, info: opened}, nil
+
+	return data, nil
 }
 
-func validateConfigurationInfo(path string, info os.FileInfo) error {
-	if !info.Mode().IsRegular() {
-		return fmt.Errorf("%s must be a regular file", path)
-	}
-	if info.Size() > MaxConfigurationBytes {
-		return fmt.Errorf("%s exceeds the %d-byte inspection limit", path, MaxConfigurationBytes)
-	}
-	return nil
-}
-
-func writeConfiguration(path string, data []byte, expected os.FileInfo) error {
-	current, err := os.Stat(path)
-	if err != nil {
-		return fmt.Errorf("inspect configuration before writing: %w", err)
-	}
-
-	if err := validateConfigurationInfo(path, current); err != nil {
-		return err
-	}
-	if !os.SameFile(expected, current) {
-		return ErrConfigurationChanged
-	}
-
+func writeConfiguration(path string, data []byte) error {
 	file, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
 		return fmt.Errorf("open configuration for writing: %w", err)
 	}
 
 	defer file.Close()
-	opened, err := file.Stat()
+	info, err := file.Stat()
 	if err != nil {
 		return fmt.Errorf("inspect opened configuration: %w", err)
 	}
-	if !os.SameFile(expected, opened) {
-		return ErrConfigurationChanged
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("%s must be a regular file", path)
 	}
+
 	written, err := file.WriteAt(data, 0)
 	if err != nil {
 		return fmt.Errorf("write configuration: %w", err)

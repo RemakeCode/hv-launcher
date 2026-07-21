@@ -99,7 +99,6 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 		LimineConfiguration: filepath.Join(root, "etc", "default", "limine"),
 		GRUBConfiguration:   filepath.Join(root, "etc", "default", "grub"),
 		GRUBOutput:          filepath.Join(root, "boot", "grub", "grub.cfg"),
-		SystemdEntries:      filepath.Join(root, "boot", "loader", "entries"),
 		LimineUpdaters:      []string{filepath.Join(root, "usr", "bin", "limine-update")},
 		UpdateGRUB:          []string{filepath.Join(root, "usr", "sbin", "update-grub")},
 		GRUBMkconfig:        []string{filepath.Join(root, "usr", "bin", "grub-mkconfig")},
