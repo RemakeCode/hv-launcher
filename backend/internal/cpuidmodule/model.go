@@ -56,8 +56,6 @@ type Identity struct {
 
 type Inspection struct {
 	FileName      string   `json:"fileName"`
-	SHA256        string   `json:"sha256"`
-	SourceDigest  string   `json:"sourceDigest"`
 	Identity      Identity `json:"identity"`
 	EntryCount    int      `json:"entryCount"`
 	ExpandedBytes int64    `json:"expandedBytes"`

@@ -2,8 +2,6 @@ package cpuidmodule
 
 import (
 	"archive/zip"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -79,10 +77,6 @@ func (i *Inspector) validateOpen(file *os.File, fileName string, size int64) (In
 	if size <= 0 || size > limits.MaxCompressedBytes {
 		return Inspection{}, fmt.Errorf("%w: compressed archive size is %d bytes", ErrResourceLimit, size)
 	}
-	digest, err := digestOpenFile(file, size)
-	if err != nil {
-		return Inspection{}, err
-	}
 	archive, err := zip.NewReader(file, size)
 	if err != nil {
 		return Inspection{}, fmt.Errorf("%w: open ZIP: %v", ErrInvalidArchive, err)
@@ -93,7 +87,6 @@ func (i *Inspector) validateOpen(file *os.File, fileName string, size int64) (In
 
 	seen := make(map[string]bool, len(archive.File))
 	regular := make(map[string]bool, len(archive.File))
-	records := make([]sourceRecord, 0, len(archive.File))
 	var expanded int64
 	var dkmsConfig []byte
 	for _, entry := range archive.File {
@@ -123,12 +116,11 @@ func (i *Inspector) validateOpen(file *os.File, fileName string, size int64) (In
 			entry.UncompressedSize64 > uint64(limits.MaxExpandedBytes-expanded) {
 			return Inspection{}, fmt.Errorf("%w: %q is too large", ErrResourceLimit, name)
 		}
-		content, digest, err := readZIPFile(entry, limits.MaxFileBytes)
+		content, err := readZIPFile(entry, limits.MaxFileBytes)
 		if err != nil {
 			return Inspection{}, fmt.Errorf("%w: read %q: %v", ErrInvalidArchive, name, err)
 		}
 		expanded += int64(len(content))
-		records = append(records, sourceRecord{path: name, size: int64(len(content)), digest: digest})
 		if name == "dkms.conf" {
 			if int64(len(content)) > limits.MaxDKMSConfigBytes {
 				return Inspection{}, fmt.Errorf("%w: dkms.conf is too large", ErrResourceLimit)
@@ -146,20 +138,10 @@ func (i *Inspector) validateOpen(file *os.File, fileName string, size int64) (In
 		return Inspection{}, err
 	}
 	return Inspection{
-		FileName: fileName, SHA256: digest,
-		SourceDigest: normalizedSourceDigest(records), Identity: identity,
+		FileName: fileName, Identity: identity,
 		EntryCount: len(archive.File), ExpandedBytes: expanded,
 		RequiredFiles: append([]string(nil), requiredFiles...), Warning: sourceWarning,
 	}, nil
-}
-
-func digestOpenFile(file *os.File, size int64) (string, error) {
-	hash := sha256.New()
-	written, err := io.Copy(hash, io.NewSectionReader(file, 0, size))
-	if err != nil || written != size {
-		return "", fmt.Errorf("%w: hash selected archive", ErrInvalidArchive)
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func validateLimits(limits Limits) error {
@@ -199,21 +181,21 @@ func normalizeZIPPath(entry *zip.File, limits Limits) (string, bool, error) {
 	return clean, false, nil
 }
 
-func readZIPFile(entry *zip.File, maximum int64) ([]byte, [sha256.Size]byte, error) {
+func readZIPFile(entry *zip.File, maximum int64) ([]byte, error) {
 	reader, err := entry.Open()
 	if err != nil {
-		return nil, [sha256.Size]byte{}, err
+		return nil, err
 	}
 	defer reader.Close()
 	content, err := io.ReadAll(io.LimitReader(reader, maximum+1))
 	if err != nil {
-		return nil, [sha256.Size]byte{}, err
+		return nil, err
 	}
 	if int64(len(content)) > maximum || uint64(len(content)) != entry.UncompressedSize64 {
-		return nil, [sha256.Size]byte{}, errors.New("expanded entry size is invalid")
+		return nil, errors.New("expanded entry size is invalid")
 	}
 	if err := reader.Close(); err != nil {
-		return nil, [sha256.Size]byte{}, err
+		return nil, err
 	}
-	return content, sha256.Sum256(content), nil
+	return content, nil
 }
