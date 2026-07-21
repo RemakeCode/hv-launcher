@@ -44,6 +44,7 @@ func DiscoverDestinations(userHome string) []Destination {
 			root: root, compatibilityTools: filepath.Join(root, "compatibilitytools.d"),
 		}
 	}
+
 	destinations := make([]Destination, 0, len(found))
 	for _, destination := range found {
 		destinations = append(destinations, destination)
@@ -65,10 +66,12 @@ func validateAndResolveSteamRoot(candidate string) (string, error) {
 	if candidate == "" || !filepath.IsAbs(candidate) {
 		return "", fmt.Errorf("Steam root must be an absolute path")
 	}
+
 	root, err := filepath.EvalSymlinks(filepath.Clean(candidate))
 	if err != nil {
 		return "", err
 	}
+
 	info, err := os.Stat(root)
 	if err != nil {
 		return "", err
@@ -76,6 +79,7 @@ func validateAndResolveSteamRoot(candidate string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("Steam root is not a directory")
 	}
+
 	steamApps, err := os.Stat(filepath.Join(root, "steamapps"))
 	if err != nil || !steamApps.IsDir() {
 		return "", fmt.Errorf("Steam root does not contain steamapps")

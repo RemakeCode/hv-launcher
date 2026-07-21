@@ -1,21 +1,26 @@
 package steamprocess
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-
-	"hv-launcher/internal/system"
 )
 
 var runningIDKeys = []string{"SteamAppId", "SteamGameId", "PRESSURE_VESSEL_APP_ID"}
 
-func ResolveRunningShortcutIDs(reader system.Reader, procRoot string, enabled map[string]bool) []string {
+type Reader interface {
+	ReadFile(path string) ([]byte, error)
+	ReadDir(path string) ([]os.DirEntry, error)
+}
+
+func ResolveRunningShortcutIDs(reader Reader, procRoot string, enabled map[string]bool) []string {
 	entries, err := reader.ReadDir(procRoot)
 	if err != nil {
 		return nil
 	}
+
 	found := map[string]bool{}
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -38,6 +43,7 @@ func ResolveRunningShortcutIDs(reader system.Reader, procRoot string, enabled ma
 			}
 		}
 	}
+
 	result := make([]string, 0, len(found))
 	for id := range found {
 		result = append(result, id)
@@ -51,9 +57,11 @@ func NormalizeRunningID(value string) (string, bool) {
 	if err != nil || parsed == 0 {
 		return "", false
 	}
+
 	if parsed <= 0xffffffff {
 		return strconv.FormatUint(parsed, 10), true
 	}
+
 	appID := uint32(parsed >> 32)
 	if appID&0x80000000 == 0 {
 		return "", false

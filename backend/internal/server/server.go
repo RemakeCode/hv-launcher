@@ -59,6 +59,7 @@ func New(options Options) (*Service, error) {
 		options.Capabilities == nil || options.ModuleInspector == nil || options.ModulePreflight == nil {
 		return nil, errors.New("configuration, inspector, manager, controller, and setup services are required")
 	}
+
 	if err := validateLoopbackAddress(options.ListenAddress); err != nil {
 		return nil, err
 	}
@@ -71,6 +72,7 @@ func New(options Options) (*Service, error) {
 	if options.Logger == nil {
 		options.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+
 	service := &Service{options: options, limiter: newTransitionLimiter(30, time.Second)}
 	service.accepting.Store(true)
 	service.server = &http.Server{
@@ -133,6 +135,7 @@ func (s *Service) Serve(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", s.options.ListenAddress, err)
 	}
+
 	s.options.Logger.Info("HTTP service listening", "address", s.options.ListenAddress)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- s.server.Serve(listener) }()
@@ -164,5 +167,6 @@ func validateLoopbackAddress(address string) error {
 	if err != nil || host != "127.0.0.1" || port == "" {
 		return fmt.Errorf("service must bind to an explicit 127.0.0.1 port")
 	}
+
 	return nil
 }

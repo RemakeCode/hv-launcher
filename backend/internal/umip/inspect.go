@@ -22,6 +22,15 @@ type Paths struct {
 	RecoveryDirectory   string
 }
 
+type Inspector struct {
+	Paths  Paths
+	Runner CommandRunner
+}
+
+type CommandRunner interface {
+	Run(ctx context.Context, name string, args ...string) ([]byte, error)
+}
+
 func DefaultPaths() Paths {
 	return Paths{
 		LimineConfiguration: "/etc/default/limine",
@@ -33,15 +42,6 @@ func DefaultPaths() Paths {
 		GRUBMkconfig:        []string{"/usr/bin/grub-mkconfig", "/usr/sbin/grub-mkconfig"},
 		RecoveryDirectory:   "/var/lib/hv-launcher/recovery",
 	}
-}
-
-type Inspector struct {
-	Paths  Paths
-	Runner CommandRunner
-}
-
-type CommandRunner interface {
-	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
 func NewInspector(paths Paths) *Inspector {

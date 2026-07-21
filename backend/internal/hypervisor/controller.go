@@ -50,12 +50,14 @@ func New(options Options) (*Controller, error) {
 	if options.Runner == nil || options.Modules == nil || options.Journal == nil {
 		return nil, errors.New("runner, module state, and journal are required")
 	}
+
 	if options.EffectiveUID == nil {
 		options.EffectiveUID = os.Geteuid
 	}
 	if options.Logger == nil {
 		options.Logger = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
+
 	return &Controller{options: options, state: StateIdle, sessions: map[string]model.Session{}}, nil
 }
 
@@ -79,6 +81,7 @@ func (c *Controller) StartSession(ctx context.Context, appID, source string) (mo
 		c.options.Logger.Error("session start rejected", "app_id", appID, "error", ErrRecoveryRequired)
 		return model.Session{}, ErrRecoveryRequired
 	}
+
 	session := model.Session{ID: newSessionID(), AppID: appID, Source: source}
 	if len(c.sessions) == 0 {
 		if c.options.Modules.Loaded("cpuid_fault_emulation") && !c.owned {
@@ -88,6 +91,7 @@ func (c *Controller) StartSession(ctx context.Context, appID, source string) (mo
 			return model.Session{}, err
 		}
 	}
+
 	c.sessions[session.ID] = session
 	if c.owned {
 		if err := c.writeJournalLocked("active"); err != nil {
@@ -96,6 +100,7 @@ func (c *Controller) StartSession(ctx context.Context, appID, source string) (mo
 			return model.Session{}, fmt.Errorf("persist active session: %w", err)
 		}
 	}
+
 	c.options.Logger.Info("session started", "app_id", appID, "session_id", session.ID, "state", c.state, "active_sessions", len(c.sessions))
 	return session, nil
 }
@@ -106,6 +111,7 @@ func (c *Controller) EndSession(ctx context.Context, sessionID string) error {
 	if _, exists := c.sessions[sessionID]; !exists {
 		return nil
 	}
+
 	appID := c.sessions[sessionID].AppID
 	delete(c.sessions, sessionID)
 	c.options.Logger.Info("session ended", "app_id", appID, "session_id", sessionID, "remaining_sessions", len(c.sessions))
@@ -115,6 +121,7 @@ func (c *Controller) EndSession(ctx context.Context, sessionID string) error {
 		}
 		return nil
 	}
+
 	if !c.owned {
 		c.state = StateIdle
 		c.options.Logger.Info("controller returned to idle", "reason", "unowned session ended")
@@ -140,12 +147,14 @@ func (c *Controller) ObserveLifetime(ctx context.Context, request model.Lifetime
 		}
 		return nil
 	}
+
 	for id, session := range c.sessions {
 		if session.AppID == request.AppID && (request.InstanceID == 0 || session.InstanceID == request.InstanceID) {
 			delete(c.sessions, id)
 			c.options.Logger.Info("Steam lifetime closed session", "app_id", request.AppID, "session_id", id, "instance_id", request.InstanceID)
 		}
 	}
+
 	if len(c.sessions) > 0 {
 		if c.owned {
 			return c.writeJournalLocked("active")
@@ -155,6 +164,7 @@ func (c *Controller) ObserveLifetime(ctx context.Context, request model.Lifetime
 	if c.owned {
 		return c.restoreLocked(ctx)
 	}
+
 	if c.state == StateEmulationActive {
 		c.state = StateIdle
 		c.options.Logger.Info("controller returned to idle", "reason", "unowned Steam lifetime ended")
@@ -168,6 +178,7 @@ func (c *Controller) Shutdown(ctx context.Context) error {
 	if !c.owned {
 		return nil
 	}
+
 	c.options.Logger.Info("backend shutdown restoring owned module state", "active_sessions", len(c.sessions))
 	c.sessions = map[string]model.Session{}
 	return c.restoreLocked(ctx)
@@ -182,6 +193,7 @@ func (c *Controller) Reconcile(ctx context.Context, running map[string]bool) err
 		c.options.Logger.Error("failed to load transition journal", "error", err)
 		return err
 	}
+
 	if record == nil {
 		if c.options.Modules.Loaded("cpuid_fault_emulation") {
 			c.state = StateEmulationActive
@@ -191,6 +203,7 @@ func (c *Controller) Reconcile(ctx context.Context, running map[string]bool) err
 		}
 		return nil
 	}
+
 	actual := c.snapshot()
 	if actual == record.Before {
 		c.state = StateIdle
@@ -202,6 +215,7 @@ func (c *Controller) Reconcile(ctx context.Context, running map[string]bool) err
 		c.options.Logger.Error("transition recovery requires manual action", "phase", record.Phase, "error", ErrRecoveryRequired)
 		return ErrRecoveryRequired
 	}
+
 	c.before, c.owned = record.Before, true
 	if actual.Emulation {
 		for _, session := range record.Sessions {
@@ -224,6 +238,7 @@ func (c *Controller) activateLocked(ctx context.Context, pending model.Session) 
 	if c.options.EffectiveUID() != 0 {
 		return errors.New("hypervisor transition requires root")
 	}
+
 	if _, err := c.options.Runner.LookPath("modprobe"); err != nil {
 		return errors.New("modprobe is unavailable")
 	}
@@ -231,6 +246,7 @@ func (c *Controller) activateLocked(ctx context.Context, pending model.Session) 
 	if err != nil {
 		return fmt.Errorf("cpuid_fault_emulation is not installed: %w", err)
 	}
+
 	vermagic := strings.TrimSpace(string(output))
 	if c.options.KernelRelease != "" && vermagic != c.options.KernelRelease && !strings.HasPrefix(vermagic, c.options.KernelRelease+" ") {
 		return fmt.Errorf("cpuid_fault_emulation does not match kernel %s", c.options.KernelRelease)
@@ -238,6 +254,7 @@ func (c *Controller) activateLocked(ctx context.Context, pending model.Session) 
 	if c.options.Modules.RefCount("kvm_amd") > 0 {
 		return ErrKVMBusy
 	}
+
 	c.before = c.snapshot()
 	c.owned = true
 	c.state = StateSwitchingToEmulation
@@ -274,6 +291,7 @@ func (c *Controller) activationFailureLocked(ctx context.Context, step string, c
 		c.options.Logger.Error("activation rollback failed", "step", step, "error", rollbackErr)
 		return fmt.Errorf("%s: %w; rollback failed: %v", step, cause, rollbackErr)
 	}
+
 	c.owned = false
 	c.state = StateIdle
 	if err := c.options.Journal.Clear(); err != nil {
@@ -291,6 +309,7 @@ func (c *Controller) restoreLocked(ctx context.Context) error {
 		c.state = StateRecoveryRequired
 		return err
 	}
+
 	if err := c.restoreModulesLocked(ctx); err != nil {
 		c.state = StateRecoveryRequired
 		return err
@@ -299,6 +318,7 @@ func (c *Controller) restoreLocked(ctx context.Context) error {
 		c.state = StateRecoveryRequired
 		return err
 	}
+
 	c.owned = false
 	c.state = StateIdle
 	c.options.Logger.Info("KVM module state restored", "state", c.state)
@@ -331,11 +351,13 @@ func (c *Controller) moduleCommand(ctx context.Context, load bool, name string) 
 		args = []string{"-r", name}
 		operation = "remove"
 	}
+
 	c.options.Logger.Info("running module transition", "operation", operation, "module", name)
 	output, err := c.options.Runner.Run(ctx, "modprobe", args...)
 	if err != nil {
 		return fmt.Errorf("modprobe %s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(output)), err)
 	}
+
 	if c.options.Modules.Loaded(name) != load {
 		return fmt.Errorf("module %s verification failed (loaded=%v)", name, c.options.Modules.Loaded(name))
 	}
@@ -360,6 +382,7 @@ func (c *Controller) journalSessionsLocked() []JournalSession {
 	for _, session := range c.sessions {
 		result = append(result, journalSession(session))
 	}
+
 	return result
 }
 
@@ -368,6 +391,7 @@ func (c *Controller) sessionListLocked() []model.Session {
 	for _, session := range c.sessions {
 		result = append(result, session)
 	}
+
 	return result
 }
 
@@ -380,5 +404,6 @@ func newSessionID() string {
 	if _, err := rand.Read(buffer); err != nil {
 		panic(err)
 	}
+
 	return hex.EncodeToString(buffer)
 }

@@ -59,10 +59,12 @@ func startSession(ctx context.Context, client *http.Client, baseURL, appID strin
 	if err != nil {
 		return "", err
 	}
+
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/sessions", bytes.NewReader(body))
 	if err != nil {
 		return "", err
 	}
+
 	req.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(req)
 	if err != nil {
@@ -72,6 +74,7 @@ func startSession(ctx context.Context, client *http.Client, baseURL, appID strin
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
 		return "", apiErrorFromResponse(response)
 	}
+
 	var result model.SessionStartResponse
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
 		return "", &APIError{StatusCode: response.StatusCode, Message: "invalid session response: " + err.Error()}
@@ -118,6 +121,7 @@ func runChild(ctx context.Context, command []string) error {
 	if len(command) == 0 {
 		return errors.New("original command is empty")
 	}
+
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

@@ -30,6 +30,7 @@ func parseGRUB(data []byte) ([]string, error) {
 	if len(assignments) == 0 {
 		return nil, fmt.Errorf("%s is missing", grubVariable)
 	}
+
 	if len(assignments) != 1 {
 		return nil, fmt.Errorf("%s must have exactly one active assignment", grubVariable)
 	}
@@ -59,6 +60,7 @@ func parseAssignment(line, variable string, allowAppend, requireQuoted bool) (as
 	if trimmed == "" || strings.HasPrefix(trimmed, "#") {
 		return assignment{}, false, nil
 	}
+
 	for _, prefix := range []string{"export ", "readonly "} {
 		if strings.HasPrefix(trimmed, prefix+variable) {
 			return assignment{}, true, fmt.Errorf("%s uses unsupported shell syntax", variable)
@@ -67,6 +69,7 @@ func parseAssignment(line, variable string, allowAppend, requireQuoted bool) (as
 	if !strings.HasPrefix(trimmed, variable) {
 		return assignment{}, false, nil
 	}
+
 	remainder := trimmed[len(variable):]
 	if remainder != "" && isVariableContinuation(rune(remainder[0])) {
 		return assignment{}, false, nil
@@ -98,6 +101,7 @@ func parseStaticValue(raw string, requireQuoted bool) (string, error) {
 	if value == "" {
 		return "", fmt.Errorf("value is empty")
 	}
+
 	if value[0] == '\'' || value[0] == '"' {
 		quote := value[0]
 		closing := closingQuote(value, quote)
@@ -117,6 +121,7 @@ func parseStaticValue(raw string, requireQuoted bool) (string, error) {
 	if requireQuoted {
 		return "", fmt.Errorf("value must use complete single or double quotes")
 	}
+
 	if comment := unquotedComment(value); comment >= 0 {
 		value = strings.TrimSpace(value[:comment])
 	}
@@ -177,5 +182,6 @@ func inspectArguments(values []string) (CandidateState, string) {
 	if configured != "" {
 		return StateConfigured, configured
 	}
+
 	return StateActionRequired, ""
 }

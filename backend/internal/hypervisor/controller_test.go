@@ -25,6 +25,13 @@ type fakeHost struct {
 	lookErr  error
 }
 
+type memoryJournal struct {
+	record *JournalRecord
+	writes int
+	clears int
+	err    error
+}
+
 func newFakeHost() *fakeHost {
 	return &fakeHost{loaded: map[string]bool{"kvm": true, "kvm_amd": true}, refCount: map[string]int{}}
 }
@@ -75,13 +82,6 @@ func (h *fakeHost) RefCount(name string) int {
 
 func (h *fakeHost) snapshot() ModuleSnapshot {
 	return ModuleSnapshot{Emulation: h.Loaded("cpuid_fault_emulation"), KVM: h.Loaded("kvm"), KVMAMD: h.Loaded("kvm_amd")}
-}
-
-type memoryJournal struct {
-	record *JournalRecord
-	writes int
-	clears int
-	err    error
 }
 
 func (j *memoryJournal) Load() (*JournalRecord, error) { return j.record, j.err }

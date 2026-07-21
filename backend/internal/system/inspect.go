@@ -28,10 +28,12 @@ func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.
 	if err != nil {
 		return model.SystemStatus{}, fmt.Errorf("read CPU information: %w", err)
 	}
+
 	kernelData, err := i.Reader.ReadFile(i.Paths.KernelRelease)
 	if err != nil {
 		return model.SystemStatus{}, fmt.Errorf("read kernel release: %w", err)
 	}
+
 	dmi := strings.Join([]string{
 		readOptional(i.Reader, i.Paths.DMIProduct),
 		readOptional(i.Reader, i.Paths.DMIBoard),
@@ -42,10 +44,12 @@ func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.
 	if err != nil {
 		return model.SystemStatus{}, err
 	}
+
 	kernel, err := classifyKernel(strings.TrimSpace(string(kernelData)))
 	if err != nil {
 		return model.SystemStatus{}, err
 	}
+
 	path := selectPath(cpu, kernel)
 	modules := i.inspectModules(ctx, strings.TrimSpace(string(kernelData)), controllerState)
 	proton := i.inspectProton()
@@ -64,6 +68,7 @@ func classifyCPU(cpuinfo, dmi string) (model.CPUStatus, map[string]bool, error) 
 			fields[strings.TrimSpace(strings.ToLower(key))] = strings.TrimSpace(value)
 		}
 	}
+
 	vendor := fields["vendor_id"]
 	if vendor == "" {
 		vendor = fields["vendor"]
@@ -73,6 +78,7 @@ func classifyCPU(cpuinfo, dmi string) (model.CPUStatus, map[string]bool, error) 
 	if vendor == "" || familyErr != nil || modelErr != nil {
 		return model.CPUStatus{}, nil, errors.New("CPU vendor, family, or model is unavailable")
 	}
+
 	flags := stringSet(fields["flags"] + " " + fields["features"])
 	cpu := model.CPUStatus{
 		Vendor:         vendor,
@@ -110,6 +116,7 @@ func classifyKernel(release string) (model.KernelStatus, error) {
 	if len(parts) < 2 {
 		return model.KernelStatus{}, fmt.Errorf("unrecognized kernel release %q", release)
 	}
+
 	major, err := strconv.Atoi(parts[0])
 	if err != nil {
 		return model.KernelStatus{}, fmt.Errorf("unrecognized kernel release %q", release)
@@ -125,6 +132,7 @@ func selectPath(cpu model.CPUStatus, kernel model.KernelStatus) model.PathMode {
 	if !cpu.Supported || !kernel.Supported {
 		return model.PathNone
 	}
+
 	if cpu.Vendor == "GenuineIntel" {
 		return model.PathNative
 	}
@@ -134,6 +142,7 @@ func selectPath(cpu model.CPUStatus, kernel model.KernelStatus) model.PathMode {
 	if cpu.SteamDeck {
 		return model.PathHypervisor
 	}
+
 	zen := generationNumber(cpu.Architecture)
 	if zen >= 4 && kernelAtLeast(kernel, 6, 18) && cpu.CPUIDFaultFlag {
 		return model.PathNative
@@ -181,10 +190,12 @@ func (i *Inspector) inspectProton() model.ProtonStatus {
 			delete(invalid, name)
 		}
 	}
+
 	tools := make([]string, 0, len(found))
 	for name := range found {
 		tools = append(tools, name)
 	}
+
 	sort.Strings(tools)
 	invalidTools := make([]model.InvalidProtonTool, 0, len(invalid))
 	for name, detail := range invalid {
@@ -230,6 +241,7 @@ func intelGeneration(family, modelID int) int {
 	if family != 6 {
 		return 0
 	}
+
 	models := map[int]int{
 		0x2a: 2, 0x2d: 2, 0x3a: 3, 0x3e: 3,
 		0x3c: 4, 0x3f: 4, 0x45: 4, 0x46: 4,
@@ -265,6 +277,7 @@ func steamDeckEvidence(family int, modelName, dmi string) bool {
 	if family != 23 {
 		return false
 	}
+
 	evidence := strings.ToLower(modelName + " " + dmi)
 	return strings.Contains(evidence, "steam deck") || strings.Contains(evidence, "jupiter") || strings.Contains(evidence, "galileo") || (strings.Contains(evidence, "amd custom apu") && strings.Contains(evidence, "valve"))
 }
@@ -279,6 +292,7 @@ func moduleRefCount(reader Reader, root, name string) int {
 	if err != nil {
 		return 0
 	}
+
 	value, _ := strconv.Atoi(strings.TrimSpace(string(data)))
 	return value
 }
@@ -288,6 +302,7 @@ func readOptional(reader Reader, path string) string {
 	if err != nil {
 		return ""
 	}
+
 	return strings.TrimSpace(string(data))
 }
 
@@ -296,6 +311,7 @@ func stringSet(value string) map[string]bool {
 	for _, item := range strings.Fields(value) {
 		result[item] = true
 	}
+
 	return result
 }
 
@@ -313,6 +329,7 @@ func failedRemedy(ok bool, remedy string) string {
 	if ok {
 		return ""
 	}
+
 	return remedy
 }
 
@@ -320,6 +337,7 @@ func boolDetail(ok bool, yes, no string) string {
 	if ok {
 		return yes
 	}
+
 	return no
 }
 
@@ -327,6 +345,7 @@ func umipDetail(cpu model.CPUStatus) string {
 	if !cpu.UMIPRequiredOff {
 		return "not required"
 	}
+
 	if cpu.UMIPPresent {
 		return "enabled and blocking"
 	}
@@ -337,6 +356,7 @@ func moduleDetail(status model.ModuleStatus) string {
 	if !status.EmulationInstalled {
 		return "not installed for the running kernel"
 	}
+
 	if !status.EmulationCompatible {
 		return "installed module does not match the running kernel"
 	}
@@ -364,6 +384,3 @@ func allChecksOK(checks []model.Check) bool {
 	}
 	return true
 }
-
-// Ensure the concrete reader remains compatible with the injected interface.
-var _ Reader = OSReader{}

@@ -2,12 +2,11 @@ package hypervisor
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
-
-	"hv-launcher/internal/system"
 )
 
 type CommandRunner interface {
@@ -17,21 +16,26 @@ type CommandRunner interface {
 
 type ExecRunner struct{}
 
-func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
-}
-
-func (ExecRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
-
 type ModuleState interface {
 	Loaded(name string) bool
 	RefCount(name string) int
 }
 
+type Reader interface {
+	ReadFile(path string) ([]byte, error)
+	ReadDir(path string) ([]os.DirEntry, error)
+}
+
 type SysModuleState struct {
-	Reader system.Reader
+	Reader Reader
 	Root   string
 }
+
+func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+}
+
+func (ExecRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
 
 func (s SysModuleState) Loaded(name string) bool {
 	_, err := s.Reader.ReadDir(filepath.Join(s.Root, name))

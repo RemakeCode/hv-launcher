@@ -20,16 +20,6 @@ type Limits struct {
 	MaxPathBytes       int
 }
 
-func DefaultLimits() Limits {
-	return Limits{
-		MaxCompressedBytes: DefaultMaxCompressedBytes,
-		MaxExpandedBytes:   DefaultMaxExpandedBytes,
-		MaxEntries:         DefaultMaxEntries,
-		MaxManifestBytes:   DefaultMaxManifestBytes,
-		MaxPathBytes:       DefaultMaxPathBytes,
-	}
-}
-
 type Compression string
 
 const (
@@ -85,11 +75,22 @@ type ValidationError struct {
 	Err    error
 }
 
+func DefaultLimits() Limits {
+	return Limits{
+		MaxCompressedBytes: DefaultMaxCompressedBytes,
+		MaxExpandedBytes:   DefaultMaxExpandedBytes,
+		MaxEntries:         DefaultMaxEntries,
+		MaxManifestBytes:   DefaultMaxManifestBytes,
+		MaxPathBytes:       DefaultMaxPathBytes,
+	}
+}
+
 func (e *ValidationError) Error() string {
 	message := string(e.Code)
 	if e.Path != "" {
 		message += fmt.Sprintf(" at %q", e.Path)
 	}
+
 	if e.Limit != "" {
 		message += fmt.Sprintf(" (%s)", e.Limit)
 	}
@@ -99,6 +100,7 @@ func (e *ValidationError) Error() string {
 	if e.Err != nil {
 		message += ": " + e.Err.Error()
 	}
+
 	return message
 }
 

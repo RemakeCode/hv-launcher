@@ -10,6 +10,12 @@ const maxUpdaterOutputBytes = 64 << 10
 
 type safeExecRunner struct{}
 
+type boundedOutput struct {
+	buffer    bytes.Buffer
+	maximum   int
+	truncated bool
+}
+
 func (safeExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
 	command := exec.CommandContext(ctx, name, args...)
 	command.Env = []string{
@@ -24,13 +30,6 @@ func (safeExecRunner) Run(ctx context.Context, name string, args ...string) ([]b
 	err := command.Run()
 	return output.Bytes(), err
 }
-
-type boundedOutput struct {
-	buffer    bytes.Buffer
-	maximum   int
-	truncated bool
-}
-
 func (w *boundedOutput) Write(data []byte) (int, error) {
 	original := len(data)
 	remaining := w.maximum - w.buffer.Len()
@@ -43,6 +42,7 @@ func (w *boundedOutput) Write(data []byte) (int, error) {
 	} else if len(data) > 0 {
 		w.truncated = true
 	}
+
 	return original, nil
 }
 
@@ -51,5 +51,6 @@ func (w *boundedOutput) Bytes() []byte {
 	if w.truncated {
 		result = append(result, []byte("\n[output truncated]")...)
 	}
+
 	return result
 }

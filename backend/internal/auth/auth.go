@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	SecretBytes       = 32
-	MaxBindingBytes   = 4_096
-	MaxCapabilityAge  = 60 * time.Second
-	MaxConsumedNonces = 4_096
-	maxTokenBytes     = 8 << 10
-	clockSkew         = 5 * time.Second
+	SecretBytes         = 32
+	MaxBindingBytes     = 4_096
+	MaxCapabilityAge    = 60 * time.Second
+	MaxConsumedNonces   = 4_096
+	maxTokenBytes       = 8 << 10
+	clockSkew           = 5 * time.Second
+	EnvironmentVariable = "HV_LAUNCHER_SETUP_SECRET"
 )
 
 type Operation string
@@ -60,6 +61,7 @@ func NewVerifier(secret []byte) (*Verifier, error) {
 	if len(secret) != SecretBytes {
 		return nil, fmt.Errorf("setup capability secret must be %d bytes", SecretBytes)
 	}
+
 	return &Verifier{
 		secret: append([]byte(nil), secret...), now: time.Now, consumed: make(map[string]int64),
 	}, nil
@@ -84,6 +86,7 @@ func (v *Verifier) Consume(token string, operation Operation, binding string) er
 			delete(v.consumed, nonce)
 		}
 	}
+
 	if parsed.ExpiresAt <= now {
 		return ErrExpiredCapability
 	}
@@ -93,6 +96,7 @@ func (v *Verifier) Consume(token string, operation Operation, binding string) er
 	if len(v.consumed) >= MaxConsumedNonces {
 		return ErrCapabilityCapacity
 	}
+
 	v.consumed[parsed.Nonce] = parsed.ExpiresAt
 	return nil
 }
@@ -101,6 +105,7 @@ func (v *Verifier) verify(token string) (claims, error) {
 	if token == "" || len(token) > maxTokenBytes {
 		return claims{}, ErrInvalidCapability
 	}
+
 	encodedPayload, encodedSignature, found := strings.Cut(token, ".")
 	if !found || encodedPayload == "" || encodedSignature == "" || strings.Contains(encodedSignature, ".") {
 		return claims{}, ErrInvalidCapability
@@ -113,6 +118,7 @@ func (v *Verifier) verify(token string) (claims, error) {
 	if err != nil || len(signature) != sha256.Size {
 		return claims{}, ErrInvalidCapability
 	}
+
 	mac := hmac.New(sha256.New, v.secret)
 	_, _ = mac.Write([]byte(encodedPayload))
 	if !hmac.Equal(signature, mac.Sum(nil)) {
@@ -128,6 +134,7 @@ func (v *Verifier) verify(token string) (claims, error) {
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return claims{}, ErrInvalidCapability
 	}
+
 	if err := validateClaims(parsed, v.now()); err != nil {
 		return claims{}, err
 	}
@@ -140,6 +147,7 @@ func validateClaims(parsed claims, now time.Time) error {
 		strings.ContainsRune(parsed.Binding, '\x00') || !validNonce(parsed.Nonce) {
 		return ErrInvalidCapability
 	}
+
 	issuedAt := time.Unix(parsed.IssuedAt, 0)
 	expiresAt := time.Unix(parsed.ExpiresAt, 0)
 	if !expiresAt.After(issuedAt) || expiresAt.Sub(issuedAt) > MaxCapabilityAge || issuedAt.After(now.Add(clockSkew)) {
@@ -164,11 +172,10 @@ func validNonce(nonce string) bool {
 	if len(nonce) < 16 || len(nonce) > 128 {
 		return false
 	}
+
 	decoded, err := base64.RawURLEncoding.DecodeString(nonce)
 	return err == nil && len(decoded) >= 16
 }
-
-const EnvironmentVariable = "HV_LAUNCHER_SETUP_SECRET"
 
 // LoadEnvironment removes the inherited secret before validating it so no
 // child process started by the Go service can inherit the value.
@@ -177,6 +184,7 @@ func LoadEnvironment() (*Verifier, error) {
 	if err := os.Unsetenv(EnvironmentVariable); err != nil {
 		return nil, fmt.Errorf("clear setup capability secret: %w", err)
 	}
+
 	if !present || encoded == "" {
 		return nil, errors.New("setup capability secret is required")
 	}
@@ -184,10 +192,12 @@ func LoadEnvironment() (*Verifier, error) {
 	if err != nil {
 		return nil, errors.New("setup capability secret is malformed")
 	}
+
 	verifier, err := NewVerifier(secret)
 	clear(secret)
 	if err != nil {
 		return nil, err
 	}
+
 	return verifier, nil
 }
