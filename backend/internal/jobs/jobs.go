@@ -81,11 +81,13 @@ func (c *Coordinator) Start(kind, phase string, work JobWork) (JobSnapshot, erro
 		c.mu.Unlock()
 		return JobSnapshot{}, ErrBusy
 	}
+
 	idBytes := make([]byte, 18)
 	if _, err := rand.Read(idBytes); err != nil {
 		c.mu.Unlock()
 		return JobSnapshot{}, err
 	}
+
 	id := base64.RawURLEncoding.EncodeToString(idBytes)
 	snapshot := &JobSnapshot{ID: id, Kind: kind, State: JobRunning, Phase: phase, Progress: 0, StartedAt: c.now()}
 	c.jobs[id] = snapshot
@@ -121,6 +123,7 @@ func (j *Job) Update(phase string, progress int) {
 	if progress > 100 {
 		progress = 100
 	}
+
 	c := j.coordinator
 	c.mu.Lock()
 	snapshot, ok := c.jobs[j.id]
@@ -128,6 +131,7 @@ func (j *Job) Update(phase string, progress int) {
 		c.mu.Unlock()
 		return
 	}
+
 	snapshot.Phase = sanitizeText(phase, 128)
 	snapshot.Progress = progress
 	event := c.eventLocked(snapshot)
@@ -141,12 +145,14 @@ func (j *Job) Output(line string) {
 	if line == "" {
 		return
 	}
+
 	c.mu.Lock()
 	snapshot, ok := c.jobs[j.id]
 	if !ok || snapshot.State != JobRunning {
 		c.mu.Unlock()
 		return
 	}
+
 	snapshot.Output = append(snapshot.Output, line)
 	for len(snapshot.Output) > maxJobOutputLines || outputSize(snapshot.Output) > maxJobOutputBytes {
 		snapshot.Output = snapshot.Output[1:]
@@ -163,6 +169,7 @@ func (c *Coordinator) finish(id string, result any, workErr error) {
 		c.mu.Unlock()
 		return
 	}
+
 	finished := c.now()
 	snapshot.FinishedAt = &finished
 	snapshot.Progress = 100
@@ -178,6 +185,7 @@ func (c *Coordinator) finish(id string, result any, workErr error) {
 	if c.active == id {
 		c.active = ""
 	}
+
 	event := c.eventLocked(snapshot)
 	c.mu.Unlock()
 	c.publish(event)
@@ -189,6 +197,7 @@ func (c *Coordinator) Active() ActiveJob {
 	if c.active == "" {
 		return ActiveJob{Active: false}
 	}
+
 	snapshot := cloneJob(c.jobs[c.active])
 	return ActiveJob{Active: true, Job: &snapshot}
 }
@@ -200,6 +209,7 @@ func (c *Coordinator) Get(id string) (JobSnapshot, bool) {
 	if !ok {
 		return JobSnapshot{}, false
 	}
+
 	return cloneJob(snapshot), true
 }
 
@@ -210,6 +220,7 @@ func (c *Coordinator) Subscribe() (<-chan JobEvent, func()) {
 	channel := make(chan JobEvent, setupSubscriberCap)
 	c.subscribers[id] = channel
 	c.mu.Unlock()
+
 	var once sync.Once
 	return channel, func() {
 		once.Do(func() {
@@ -255,6 +266,7 @@ func cloneJob(snapshot *JobSnapshot) JobSnapshot {
 		finished := *snapshot.FinishedAt
 		cloned.FinishedAt = &finished
 	}
+
 	return cloned
 }
 
@@ -263,6 +275,7 @@ func outputSize(lines []string) int {
 	for _, line := range lines {
 		total += len(line)
 	}
+
 	return total
 }
 

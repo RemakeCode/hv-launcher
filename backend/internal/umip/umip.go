@@ -43,6 +43,7 @@ func (i *Inspector) Apply(ctx context.Context, bootloader Bootloader, progress P
 	if err != nil {
 		return ApplyResult{}, err
 	}
+
 	keepBackup := true
 	defer func() {
 		if !keepBackup {
@@ -83,6 +84,7 @@ func (i *Inspector) Apply(ctx context.Context, bootloader Bootloader, progress P
 	if recoveryErr != nil {
 		return ApplyResult{}, recoveryError(updateErr, backup, fmt.Errorf("recovery updater failed: %w", recoveryErr))
 	}
+
 	if err := removeRecoveryBackup(backup); err != nil {
 		return ApplyResult{}, fmt.Errorf("bootloader update failed and was rolled back successfully; recovery backup remains at %s: %w", backup, updateErr)
 	}
@@ -100,6 +102,7 @@ func buildReplacement(bootloader Bootloader, data []byte) ([]byte, error) {
 		if err := requireAction(values); err != nil {
 			return nil, err
 		}
+
 		replacement := append([]byte(nil), data...)
 		if len(replacement) > 0 && replacement[len(replacement)-1] != '\n' {
 			replacement = append(replacement, '\n')
@@ -125,6 +128,7 @@ func requireAction(values []string) error {
 	if state == "" {
 		return fmt.Errorf("%w: conflicting kernel argument %q", ErrCandidateUnavailable, token)
 	}
+
 	if state == StateConfigured {
 		return fmt.Errorf("%w: %s is already configured", ErrNoChangeRequired, token)
 	}
@@ -144,6 +148,7 @@ func replaceGRUBValue(data []byte, proposed string) ([]byte, error) {
 			offset += len(lineWithEnding)
 			continue
 		}
+
 		valueStart, valueEnd, err := quotedValueBounds(line)
 		if err != nil {
 			return nil, err
@@ -170,6 +175,7 @@ func quotedValueBounds(line string) (int, int, error) {
 	if position >= len(line) || line[position] != '=' {
 		return 0, 0, fmt.Errorf("%s is not a supported assignment", grubVariable)
 	}
+
 	position++
 	for position < len(line) && (line[position] == ' ' || line[position] == '\t') {
 		position++
@@ -177,6 +183,7 @@ func quotedValueBounds(line string) (int, int, error) {
 	if position >= len(line) || (line[position] != '\'' && line[position] != '"') {
 		return 0, 0, fmt.Errorf("%s value is not quoted", grubVariable)
 	}
+
 	quoted := line[position:]
 	closing := closingQuote(quoted, quoted[0])
 	if closing < 0 {
@@ -203,6 +210,7 @@ func readConfigurationSnapshot(path string) (configurationSnapshot, error) {
 	if err != nil {
 		return configurationSnapshot{}, fmt.Errorf("inspect trusted configuration %s: %w", path, err)
 	}
+
 	if err := validateConfigurationInfo(path, initial); err != nil {
 		return configurationSnapshot{}, err
 	}
@@ -210,11 +218,13 @@ func readConfigurationSnapshot(path string) (configurationSnapshot, error) {
 	if err != nil {
 		return configurationSnapshot{}, fmt.Errorf("open trusted configuration %s: %w", path, err)
 	}
+
 	defer file.Close()
 	opened, err := file.Stat()
 	if err != nil {
 		return configurationSnapshot{}, fmt.Errorf("inspect opened configuration %s: %w", path, err)
 	}
+
 	if !os.SameFile(initial, opened) {
 		return configurationSnapshot{}, ErrConfigurationChanged
 	}
@@ -225,6 +235,7 @@ func readConfigurationSnapshot(path string) (configurationSnapshot, error) {
 	if err != nil {
 		return configurationSnapshot{}, fmt.Errorf("read trusted configuration %s: %w", path, err)
 	}
+
 	if int64(len(data)) > MaxConfigurationBytes {
 		return configurationSnapshot{}, fmt.Errorf("%s exceeds the %d-byte inspection limit", path, MaxConfigurationBytes)
 	}
@@ -246,16 +257,19 @@ func writeConfiguration(path string, data []byte, expected os.FileInfo) error {
 	if err != nil {
 		return fmt.Errorf("inspect configuration before writing: %w", err)
 	}
+
 	if err := validateConfigurationInfo(path, current); err != nil {
 		return err
 	}
 	if !os.SameFile(expected, current) {
 		return ErrConfigurationChanged
 	}
+
 	file, err := os.OpenFile(path, os.O_WRONLY, 0)
 	if err != nil {
 		return fmt.Errorf("open configuration for writing: %w", err)
 	}
+
 	defer file.Close()
 	opened, err := file.Stat()
 	if err != nil {
@@ -284,6 +298,7 @@ func createRecoveryBackup(directory string, bootloader Bootloader, data []byte) 
 	if err := os.MkdirAll(directory, 0o700); err != nil {
 		return "", fmt.Errorf("create recovery directory: %w", err)
 	}
+
 	if err := os.Chmod(directory, 0o700); err != nil {
 		return "", fmt.Errorf("make recovery directory private: %w", err)
 	}
@@ -291,16 +306,19 @@ func createRecoveryBackup(directory string, bootloader Bootloader, data []byte) 
 	if err != nil || !info.IsDir() {
 		return "", fmt.Errorf("recovery path must be a directory")
 	}
+
 	random := make([]byte, 12)
 	if _, err := rand.Read(random); err != nil {
 		return "", fmt.Errorf("create recovery backup name: %w", err)
 	}
+
 	name := "umip-" + string(bootloader) + "-" + base64.RawURLEncoding.EncodeToString(random) + ".bak"
 	path := filepath.Join(directory, name)
 	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return "", fmt.Errorf("create recovery backup: %w", err)
 	}
+
 	remove := true
 	defer func() {
 		file.Close()

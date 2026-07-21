@@ -32,6 +32,7 @@ func (s *Service) preflightProtonArchive(w http.ResponseWriter, r *http.Request)
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	if request.Path == "" || len(request.Path) > maxSetupPathBytes || !filepath.IsAbs(request.Path) {
 		writeError(w, http.StatusBadRequest, errors.New("selected archive path must be an absolute bounded path"))
 		return
@@ -42,6 +43,7 @@ func (s *Service) preflightProtonArchive(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
+
 	s.options.Logger.Info("Proton archive preflight complete", "path", request.Path)
 	writeJSON(w, http.StatusOK, protonPreflightResponse{
 		Preflight:      preflight,
@@ -54,6 +56,7 @@ func (s *Service) installProtonArchive(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	if request.Path == "" || len(request.Path) > maxSetupPathBytes || !filepath.IsAbs(request.Path) ||
 		request.DestinationID == "" || len(request.DestinationID) > 128 {
 		writeError(w, http.StatusBadRequest, errors.New("an absolute bounded archive path and destination ID are required"))
@@ -63,6 +66,7 @@ func (s *Service) installProtonArchive(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("confirm that you sourced and selected the intended Proton archive"))
 		return
 	}
+
 	started, err := s.options.Jobs.Start("proton-install", "starting", func(job *jobs.Job) (any, error) {
 		result, installErr := s.options.Proton.Install(context.Background(), request.Path, request.DestinationID, func(phase string, progress int, message string) {
 			job.Update(phase, progress)
@@ -72,6 +76,7 @@ func (s *Service) installProtonArchive(w http.ResponseWriter, r *http.Request) {
 			s.options.Logger.Error("Proton installation failed", "path", request.Path, "error", installErr)
 			return nil, installErr
 		}
+
 		job.Output("Compatibility tool installed. Steam must be restarted before selecting it.")
 		s.options.Logger.Info("Proton installation complete", "tool", result.ToolName, "destination_id", result.DestinationID)
 		return result, nil

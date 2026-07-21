@@ -13,18 +13,11 @@ type Reader interface {
 
 type OSReader struct{}
 
-func (OSReader) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
-func (OSReader) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
-
 type CommandRunner interface {
 	Run(ctx context.Context, name string, args ...string) ([]byte, error)
 }
 
 type ExecRunner struct{}
-
-func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
-}
 
 type Paths struct {
 	CPUInfo       string
@@ -35,6 +28,13 @@ type Paths struct {
 	ModulesRoot   string
 	SteamRoots    []string
 	RuntimeDir    string
+}
+
+func (OSReader) ReadFile(path string) ([]byte, error)       { return os.ReadFile(path) }
+func (OSReader) ReadDir(path string) ([]os.DirEntry, error) { return os.ReadDir(path) }
+
+func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return exec.CommandContext(ctx, name, args...).CombinedOutput()
 }
 
 func DefaultPaths(userHome, runtimeDir string) Paths {

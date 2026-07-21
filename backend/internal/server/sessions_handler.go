@@ -15,14 +15,17 @@ func (s *Service) startSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, errors.New("service is shutting down"))
 		return
 	}
+
 	if !s.limiter.Allow() {
 		writeError(w, http.StatusTooManyRequests, errors.New("session transition rate exceeded"))
 		return
 	}
+
 	var request model.SessionStartRequest
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	appID, ok := validAppID(request.AppID)
 	if !ok {
 		writeError(w, http.StatusBadRequest, errors.New("invalid App ID"))
@@ -32,6 +35,7 @@ func (s *Service) startSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, errors.New("App ID is not enabled"))
 		return
 	}
+
 	session, err := s.options.Controller.StartSession(r.Context(), appID, "wrapper")
 	if err != nil {
 		status := http.StatusConflict
@@ -60,6 +64,7 @@ func (s *Service) lifetime(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	if request.AppID == "0" {
 		ids := steamprocess.ResolveRunningShortcutIDs(s.options.ProcessReader, s.options.ProcRoot, s.enabledIDs())
 		if len(ids) != 1 {
@@ -68,12 +73,14 @@ func (s *Service) lifetime(w http.ResponseWriter, r *http.Request) {
 		}
 		request.AppID = ids[0]
 	}
+
 	appID, ok := validAppID(request.AppID)
 	if !ok {
 		writeError(w, http.StatusBadRequest, errors.New("invalid App ID"))
 		return
 	}
 	request.AppID = appID
+
 	if err := s.options.Controller.ObserveLifetime(r.Context(), request); err != nil {
 		s.options.Logger.Error("Steam lifetime handling failed", "app_id", request.AppID, "instance_id", request.InstanceID, "running", request.Running, "error", err)
 		writeError(w, http.StatusConflict, err)

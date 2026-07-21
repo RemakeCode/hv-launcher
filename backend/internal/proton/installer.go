@@ -39,6 +39,21 @@ type Installer struct {
 	rename                func(string, string) error
 }
 
+type compressedProgressReader struct {
+	reader   io.Reader
+	total    int64
+	read     int64
+	progress ProgressFunc
+	last     int
+}
+
+type pendingLink struct {
+	name           string
+	linkName       string
+	resolvedTarget string
+	kind           entryKind
+}
+
 func NewInstaller(userHome string) *Installer {
 	return &Installer{UserHome: userHome, Limits: DefaultLimits(), rename: os.Rename}
 }
@@ -48,11 +63,13 @@ func (i *Installer) PreflightPath(archivePath string) (Preflight, error) {
 	if err != nil {
 		return Preflight{}, err
 	}
+
 	defer archive.Close()
 	info, err := archive.Stat()
 	if err != nil {
 		return Preflight{}, fmt.Errorf("inspect selected archive: %w", err)
 	}
+
 	compression, err := detectCompression(archive)
 	if err != nil {
 		return Preflight{}, err
@@ -69,14 +86,17 @@ func (i *Installer) Install(ctx context.Context, archivePath, destinationID stri
 	if err != nil {
 		return InstallResult{}, err
 	}
+
 	limits := i.limits()
 	if err := validateLimits(limits); err != nil {
 		return InstallResult{}, err
 	}
+
 	archive, err := i.openArchive(archivePath)
 	if err != nil {
 		return InstallResult{}, err
 	}
+
 	defer archive.Close()
 	archiveInfo, err := archive.Stat()
 	if err != nil {
@@ -90,6 +110,7 @@ func (i *Installer) Install(ctx context.Context, archivePath, destinationID stri
 	if err != nil {
 		return InstallResult{}, err
 	}
+
 	staging, err := os.MkdirTemp(compatibilityTools, ".hv-launcher-stage-")
 	if err != nil {
 		return InstallResult{}, fmt.Errorf("create installation staging directory: %w", err)
@@ -98,6 +119,7 @@ func (i *Installer) Install(ctx context.Context, archivePath, destinationID stri
 		_ = os.RemoveAll(staging)
 		return InstallResult{}, fmt.Errorf("secure installation staging directory: %w", err)
 	}
+
 	defer os.RemoveAll(staging)
 
 	report(progress, "extracting-and-validating", 20, "Safely extracting and validating the archive")
@@ -106,18 +128,21 @@ func (i *Installer) Install(ctx context.Context, archivePath, destinationID stri
 	if err != nil {
 		return InstallResult{}, err
 	}
+
 	finalPath := filepath.Join(compatibilityTools, extracted.ToolRoot)
 	if _, err := os.Lstat(finalPath); err == nil {
 		return InstallResult{}, fmt.Errorf("compatibility tool %q already exists", extracted.ToolRoot)
 	} else if !os.IsNotExist(err) {
 		return InstallResult{}, fmt.Errorf("inspect final compatibility tool: %w", err)
 	}
+
 	stagedRoot := filepath.Join(staging, extracted.ToolRoot)
 	if i.beforeStageValidation != nil {
 		if err := i.beforeStageValidation(stagedRoot); err != nil {
 			return InstallResult{}, err
 		}
 	}
+
 	report(progress, "validating-staged-tool", 75, "Validating the staged Proton tool")
 	if _, err := InspectInstalledWithLimits(stagedRoot, limits); err != nil {
 		return InstallResult{}, fmt.Errorf("validate staged compatibility tool: %w", err)
@@ -127,23 +152,18 @@ func (i *Installer) Install(ctx context.Context, archivePath, destinationID stri
 	} else if !os.IsNotExist(err) {
 		return InstallResult{}, fmt.Errorf("recheck final compatibility tool: %w", err)
 	}
+
 	rename := i.rename
 	if rename == nil {
 		rename = os.Rename
 	}
+
 	report(progress, "committing", 90, "Making the installed Proton tool available to Steam")
 	if err := rename(stagedRoot, finalPath); err != nil {
 		return InstallResult{}, fmt.Errorf("commit compatibility tool: %w", err)
 	}
-	return InstallResult{ToolName: extracted.ToolRoot, DestinationID: destination.ID, SHA256: extracted.SHA256, RestartSteam: true}, nil
-}
 
-type compressedProgressReader struct {
-	reader   io.Reader
-	total    int64
-	read     int64
-	progress ProgressFunc
-	last     int
+	return InstallResult{ToolName: extracted.ToolRoot, DestinationID: destination.ID, SHA256: extracted.SHA256, RestartSteam: true}, nil
 }
 
 func (r *compressedProgressReader) Read(buffer []byte) (int, error) {
@@ -236,13 +256,6 @@ func (i *Installer) ensureCompatibilityTools(directory string) (string, error) {
 func supportedArchiveSuffix(name string) bool {
 	lower := strings.ToLower(name)
 	return strings.HasSuffix(lower, ".tar.gz") || strings.HasSuffix(lower, ".tgz") || strings.HasSuffix(lower, ".tar.xz")
-}
-
-type pendingLink struct {
-	name           string
-	linkName       string
-	resolvedTarget string
-	kind           entryKind
 }
 
 func extractArchive(ctx context.Context, archive io.Reader, staging string, limits Limits) (Inspection, error) {

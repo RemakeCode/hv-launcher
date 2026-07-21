@@ -30,6 +30,10 @@ type PreflightPaths struct {
 	PackageManagers    map[string][]string
 }
 
+type PreflightInspector struct {
+	Paths PreflightPaths
+}
+
 func DefaultPreflightPaths() PreflightPaths {
 	return PreflightPaths{
 		KernelRelease: "/proc/sys/kernel/osrelease", ModulesRoot: "/lib/modules", BootRoot: "/boot",
@@ -44,10 +48,6 @@ func DefaultPreflightPaths() PreflightPaths {
 			"pacman": {"/usr/bin/pacman"}, "apt": {"/usr/bin/apt-get"}, "dnf": {"/usr/bin/dnf", "/usr/bin/dnf5"},
 		},
 	}
-}
-
-type PreflightInspector struct {
-	Paths PreflightPaths
 }
 
 func NewPreflightInspector(paths PreflightPaths) *PreflightInspector {

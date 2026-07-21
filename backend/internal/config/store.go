@@ -28,6 +28,7 @@ func DataDir(userHome, xdgDataHome string) (string, error) {
 		}
 		return filepath.Join(xdgDataHome, applicationDir), nil
 	}
+
 	if userHome == "" || !filepath.IsAbs(userHome) {
 		return "", errors.New("user home must be an absolute path")
 	}
@@ -38,6 +39,7 @@ func Open(dir string) (*Store, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+
 	s := &Store{
 		path: filepath.Join(dir, "config.json"),
 		doc:  model.ConfigDocument{Version: CurrentVersion, Games: map[string]model.ManagedGame{}},
@@ -49,6 +51,7 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if err := json.Unmarshal(data, &s.doc); err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
@@ -56,6 +59,7 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if changed {
 		if err := s.saveLocked(); err != nil {
 			return nil, fmt.Errorf("persist upgraded config: %w", err)
@@ -68,6 +72,7 @@ func (s *Store) migrate() (bool, error) {
 	if s.doc.Version > CurrentVersion {
 		return false, fmt.Errorf("config version %d is newer than supported version %d", s.doc.Version, CurrentVersion)
 	}
+
 	changed := false
 	if s.doc.Games == nil {
 		s.doc.Games = map[string]model.ManagedGame{}
@@ -87,6 +92,7 @@ func (s *Store) Snapshot() model.ConfigDocument {
 	for id, game := range s.doc.Games {
 		games[id] = game
 	}
+
 	return model.ConfigDocument{Version: s.doc.Version, Games: games}
 }
 
@@ -110,6 +116,7 @@ func (s *Store) PutGame(game model.ManagedGame) error {
 		}
 		return err
 	}
+
 	return nil
 }
 
@@ -124,6 +131,7 @@ func (s *Store) DeleteGame(appID string) error {
 		}
 		return err
 	}
+
 	return nil
 }
 

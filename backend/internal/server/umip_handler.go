@@ -29,15 +29,18 @@ func (s *Service) applyUMIP(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	if request.Bootloader != umip.BootloaderLimine && request.Bootloader != umip.BootloaderGRUB {
 		writeError(w, http.StatusBadRequest, umip.ErrUnsupportedBootloader)
 		return
 	}
+
 	binding := umip.UMIPApplyBinding(request.Bootloader)
 	if err := s.options.Capabilities.Consume(request.Capability, auth.OperationUMIPApply, binding); err != nil {
 		writeError(w, http.StatusForbidden, err)
 		return
 	}
+
 	started, err := s.options.Jobs.Start("umip-apply", "starting", func(job *jobs.Job) (any, error) {
 		result, applyErr := s.options.UMIP.Apply(context.Background(), request.Bootloader, func(phase string, progress int, message string) {
 			job.Update(phase, progress)

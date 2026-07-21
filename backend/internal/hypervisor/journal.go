@@ -50,6 +50,7 @@ func (j *FileJournal) Load() (*JournalRecord, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	var record JournalRecord
 	if err := json.Unmarshal(data, &record); err != nil {
 		return nil, err
@@ -61,16 +62,19 @@ func (j *FileJournal) Write(record JournalRecord) error {
 	if err := os.MkdirAll(filepath.Dir(j.path), 0o755); err != nil {
 		return err
 	}
+
 	record.Version = 1
 	data, err := json.MarshalIndent(record, "", "  ")
 	if err != nil {
 		return err
 	}
+
 	tmp := j.path + ".tmp"
 	file, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
 	if err != nil {
 		return err
 	}
+
 	if _, err := file.Write(append(data, '\n')); err != nil {
 		file.Close()
 		return err
@@ -93,6 +97,7 @@ func (j *FileJournal) Clear() error {
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
+
 	if err != nil {
 		return err
 	}

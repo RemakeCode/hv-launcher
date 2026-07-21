@@ -35,17 +35,6 @@ type Limits struct {
 	MaxPathBytes       int
 }
 
-func DefaultLimits() Limits {
-	return Limits{
-		MaxCompressedBytes: MaxCompressedBytes,
-		MaxExpandedBytes:   MaxExpandedBytes,
-		MaxFileBytes:       MaxFileBytes,
-		MaxDKMSConfigBytes: MaxDKMSConfigBytes,
-		MaxEntries:         MaxEntries,
-		MaxPathBytes:       MaxPathBytes,
-	}
-}
-
 type Identity struct {
 	PackageName      string `json:"packageName"`
 	PackageVersion   string `json:"packageVersion"`
@@ -88,4 +77,15 @@ type SigningEvidence struct {
 	ModuleSigningEnabled bool   `json:"moduleSigningEnabled"`
 	SignatureForced      bool   `json:"signatureForced"`
 	TrustedKeysSetting   string `json:"trustedKeysSetting,omitempty"`
+}
+
+func DefaultLimits() Limits {
+	return Limits{
+		MaxCompressedBytes: MaxCompressedBytes,
+		MaxExpandedBytes:   MaxExpandedBytes,
+		MaxFileBytes:       MaxFileBytes,
+		MaxDKMSConfigBytes: MaxDKMSConfigBytes,
+		MaxEntries:         MaxEntries,
+		MaxPathBytes:       MaxPathBytes,
+	}
 }

@@ -17,6 +17,7 @@ func decodeStrict(w http.ResponseWriter, r *http.Request, destination any) bool 
 		writeError(w, http.StatusBadRequest, fmt.Errorf("invalid JSON: %w", err))
 		return false
 	}
+
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		writeError(w, http.StatusBadRequest, errors.New("request must contain one JSON object"))
 		return false
@@ -28,6 +29,7 @@ func validAppID(value string) (string, bool) {
 	if value == "" || len(value) > 10 {
 		return "", false
 	}
+
 	parsed, err := strconv.ParseUint(value, 10, 32)
 	if err != nil || parsed == 0 {
 		return "", false

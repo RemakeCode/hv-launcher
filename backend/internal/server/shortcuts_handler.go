@@ -19,10 +19,12 @@ func (s *Service) enableGame(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("invalid App ID"))
 		return
 	}
+
 	var request model.ManageGameRequest
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	request.Name = strings.TrimSpace(request.Name)
 	if request.Name == "" || len(request.Name) > 256 {
 		writeError(w, http.StatusBadRequest, errors.New("game name must be between 1 and 256 characters"))
@@ -33,6 +35,7 @@ func (s *Service) enableGame(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err)
 		return
 	}
+
 	if status.Status != model.StatusHypervisorReady {
 		writeError(w, http.StatusConflict, errors.New("per-game management is available only on a hypervisor-ready host"))
 		return
@@ -53,10 +56,12 @@ func (s *Service) disableGame(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("invalid App ID"))
 		return
 	}
+
 	var request model.RestoreRequest
 	if !decodeStrict(w, r, &request) {
 		return
 	}
+
 	response, err := s.options.Manager.Restore(appID, request.CurrentLaunch)
 	if err != nil {
 		s.options.Logger.Error("failed to restore shortcut launch options", "app_id", appID, "error", err)
