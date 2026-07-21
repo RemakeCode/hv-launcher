@@ -18,8 +18,8 @@ import (
 	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
-	"hv-launcher/internal/manage"
 	"hv-launcher/internal/proton"
+	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
 )
@@ -33,7 +33,7 @@ type Options struct {
 	ListenAddress   string
 	Config          *config.Store
 	Inspector       *system.Inspector
-	Manager         *manage.Manager
+	Manager         *shortcuts.Manager
 	Controller      *hypervisor.Controller
 	ProcessReader   system.Reader
 	ProcRoot        string
