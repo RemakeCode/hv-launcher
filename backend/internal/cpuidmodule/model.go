@@ -89,10 +89,3 @@ type SigningEvidence struct {
 	SignatureForced      bool   `json:"signatureForced"`
 	TrustedKeysSetting   string `json:"trustedKeysSetting,omitempty"`
 }
-
-type ArchivePreflight struct {
-	FileName        string    `json:"fileName"`
-	CompressedBytes int64     `json:"compressedBytes"`
-	Warning         string    `json:"warning"`
-	System          Preflight `json:"system"`
-}

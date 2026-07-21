@@ -20,30 +20,6 @@ type Inspector struct {
 
 func NewInspector() *Inspector { return &Inspector{Limits: DefaultLimits()} }
 
-// PreflightPath performs only the fast checks needed before the user confirms
-// installation. Full archive validation belongs to the installation job.
-func (i *Inspector) PreflightPath(selectedPath string) (ArchivePreflight, error) {
-	file, size, err := openSelectedFile(selectedPath)
-	if err != nil {
-		return ArchivePreflight{}, err
-	}
-	defer file.Close()
-	if err := validateLimits(i.Limits); err != nil {
-		return ArchivePreflight{}, err
-	}
-	if size <= 0 || size > i.Limits.MaxCompressedBytes {
-		return ArchivePreflight{}, fmt.Errorf("%w: compressed archive size is %d bytes", ErrResourceLimit, size)
-	}
-	var signature [4]byte
-	if _, err := file.ReadAt(signature[:], 0); err != nil ||
-		(string(signature[:]) != "PK\x03\x04" && string(signature[:]) != "PK\x05\x06" && string(signature[:]) != "PK\x07\x08") {
-		return ArchivePreflight{}, fmt.Errorf("%w: selected file is not a ZIP archive", ErrInvalidArchive)
-	}
-	return ArchivePreflight{
-		FileName: filepath.Base(selectedPath), CompressedBytes: size, Warning: sourceWarning,
-	}, nil
-}
-
 func (i *Inspector) ValidatePath(selectedPath string) (Inspection, error) {
 	file, size, err := openSelectedFile(selectedPath)
 	if err != nil {
@@ -133,6 +109,7 @@ func (i *Inspector) validateOpen(file *os.File, fileName string, size int64) (In
 			return Inspection{}, fmt.Errorf("%w: required regular file %q is missing", ErrInvalidArchive, required)
 		}
 	}
+
 	identity, err := ParseDKMSConfig(dkmsConfig)
 	if err != nil {
 		return Inspection{}, err

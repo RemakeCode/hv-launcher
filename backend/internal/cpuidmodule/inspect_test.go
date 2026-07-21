@@ -147,35 +147,6 @@ func TestInspectAcceptsSelectedSymlinkAndRejectsNonZIP(t *testing.T) {
 	}
 }
 
-func TestArchivePreflightChecksOnlyFileTypeAndSize(t *testing.T) {
-	archivePath := writeModuleZIP(t, validModuleEntries())
-	inspector := NewInspector()
-	preflight, err := inspector.PreflightPath(archivePath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if preflight.FileName != filepath.Base(archivePath) || preflight.CompressedBytes <= 0 ||
-		!strings.Contains(preflight.Warning, "as root") {
-		t.Fatalf("unexpected preflight: %+v", preflight)
-	}
-
-	unsafeArchive := writeModuleZIP(t, append(validModuleEntries(), zipFixtureEntry{name: "link", content: "Makefile", mode: os.ModeSymlink | 0o777}))
-	if _, err := inspector.PreflightPath(unsafeArchive); err != nil {
-		t.Fatalf("fast preflight performed deep validation: %v", err)
-	}
-	if _, err := inspector.ValidatePath(unsafeArchive); !errors.Is(err, ErrUnsafeEntry) {
-		t.Fatalf("installation validation accepted unsafe archive: %v", err)
-	}
-
-	notZIP := filepath.Join(t.TempDir(), "module.zip")
-	if err := os.WriteFile(notZIP, []byte("not a zip"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := inspector.PreflightPath(notZIP); !errors.Is(err, ErrInvalidArchive) {
-		t.Fatalf("fast preflight accepted non-ZIP content: %v", err)
-	}
-}
-
 func validModuleEntries() []zipFixtureEntry {
 	entries := []zipFixtureEntry{
 		{name: "dkms.conf", content: validDKMSConfig(), mode: 0o644},
