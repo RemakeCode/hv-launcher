@@ -31,6 +31,8 @@ type testHost struct {
 	calls  []string
 }
 
+type testJournal struct{ record *hypervisor.JournalRecord }
+
 func (h *testHost) Run(_ context.Context, name string, args ...string) ([]byte, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -57,8 +59,6 @@ func (h *testHost) Loaded(name string) bool {
 	return h.loaded[name]
 }
 func (h *testHost) RefCount(string) int { return 0 }
-
-type testJournal struct{ record *hypervisor.JournalRecord }
 
 func (j *testJournal) Load() (*hypervisor.JournalRecord, error)    { return j.record, nil }
 func (j *testJournal) Write(record hypervisor.JournalRecord) error { j.record = &record; return nil }
@@ -90,7 +90,7 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	inspector := &system.Inspector{Reader: system.OSReader{}, Runner: host, Paths: system.Paths{
 		CPUInfo: cpu, KernelRelease: kernel, ModulesRoot: modules, SteamRoots: []string{steamRoot},
 	}}
-	manager := &shortcuts.Manager{Store: store, WrapperPath: "/home/deck/.local/share/hv-launcher/hv-launcher-wrapper"}
+	manager := &shortcuts.Manager{Store: store, WrapperPath: "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher"}
 	capabilities, err := auth.NewVerifier(testSetupSecret())
 	if err != nil {
 		t.Fatal(err)

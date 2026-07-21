@@ -18,28 +18,7 @@ import (
 	"hv-launcher/internal/model"
 )
 
-func TestInstallCreatesStableExecutableCopy(t *testing.T) {
-	home := t.TempDir()
-	source := filepath.Join(t.TempDir(), "service")
-	if err := os.WriteFile(source, []byte("binary"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	destination, err := Install(source, home)
-	if err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(destination)
-	if err != nil || string(data) != "binary" {
-		t.Fatalf("copy: %q, %v", data, err)
-	}
-	info, err := os.Stat(destination)
-	if err != nil || info.Mode().Perm() != 0o755 {
-		t.Fatalf("mode: %v, %v", info, err)
-	}
-	if second, err := Install(source, home); err != nil || second != destination {
-		t.Fatalf("idempotent install failed: %s, %v", second, err)
-	}
-}
+type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func TestServiceUnavailableFailsOpen(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -152,8 +131,6 @@ func TestTerminationSignalIsForwardedToChildProcessGroup(t *testing.T) {
 func shellQuoteTest(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'"
 }
-
-type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (function roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {
 	return function(request)

@@ -107,11 +107,6 @@ func serveBackend() error {
 		return fmt.Errorf("configure unprivileged Proton worker: %w", err)
 	}
 
-	wrapperPath, err := wrapper.Install(executable, userHome)
-	if err != nil {
-		return fmt.Errorf("install persistent wrapper: %w", err)
-	}
-
 	kernelData, err := os.ReadFile("/proc/sys/kernel/osrelease")
 	if err != nil {
 		return fmt.Errorf("read kernel release: %w", err)
@@ -137,7 +132,7 @@ func serveBackend() error {
 		ListenAddress:   defaultListenAddress,
 		Config:          store,
 		Inspector:       system.NewInspector(userHome, runtimeDir),
-		Manager:         &shortcuts.Manager{Store: store, WrapperPath: wrapperPath},
+		Manager:         &shortcuts.Manager{Store: store, WrapperPath: executable},
 		Controller:      controller,
 		Logger:          logger,
 		Proton:          protonWorker,
