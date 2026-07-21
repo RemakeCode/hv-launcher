@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 )
 
 func TestWorkerClientUsesDeckyCredentialsAndMinimalEnvironment(t *testing.T) {
@@ -33,6 +35,29 @@ func TestWorkerClientUsesDeckyCredentialsAndMinimalEnvironment(t *testing.T) {
 func TestWorkerRejectsPrivilegedDeckyIdentity(t *testing.T) {
 	if _, err := NewWorkerClient("/opt/hv-launcher", "/root", 0, 0); err == nil {
 		t.Fatal("root Proton worker identity was accepted")
+	}
+}
+
+func TestStopWorkerDoesNotWaitForMoreOutput(t *testing.T) {
+	command := exec.Command("sh", "-c", "while :; do printf invalid; done")
+	stdout, err := command.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		stopWorker(command, stdout)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("stopWorker blocked while the worker continued writing")
 	}
 }
 

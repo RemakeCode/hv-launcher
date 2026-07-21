@@ -200,6 +200,22 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 		}
 		assertCheckRemedy(t, status.Checks, "emulation-module")
 	})
+
+	t.Run("untrusted module signing requires setup", func(t *testing.T) {
+		modules := model.ModuleStatus{
+			EmulationInstalled: true, EmulationCompatible: true, SigningRequired: true, ControllerState: "idle",
+		}
+		status := deriveStatus(hypervisorCPU, supportedKernel, model.PathHypervisor, modules, linuwux, nil)
+		if status.Status != model.StatusSetupRequired {
+			t.Fatalf("got %s, want %s", status.Status, model.StatusSetupRequired)
+		}
+		assertCheckRemedy(t, status.Checks, "emulation-module")
+		for _, check := range status.Checks {
+			if check.ID == "emulation-module" && !strings.Contains(check.Detail, "signing") {
+				t.Fatalf("module detail did not explain signing: %q", check.Detail)
+			}
+		}
+	})
 }
 
 func TestInspectProtonRejectsUnpatchedSunsetSLR(t *testing.T) {

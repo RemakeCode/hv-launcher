@@ -1,7 +1,7 @@
 package cpuidmodule
 
 import (
-	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -31,7 +31,9 @@ type PreflightPaths struct {
 }
 
 type PreflightInspector struct {
-	Paths PreflightPaths
+	Paths    PreflightPaths
+	Runner   PackageCommandRunner
+	Registry PackageAdapterRegistry
 }
 
 func DefaultPreflightPaths() PreflightPaths {
@@ -51,10 +53,18 @@ func DefaultPreflightPaths() PreflightPaths {
 }
 
 func NewPreflightInspector(paths PreflightPaths) *PreflightInspector {
-	return &PreflightInspector{Paths: paths}
+	return &PreflightInspector{Paths: paths, Runner: ExecPackageCommandRunner{}, Registry: DefaultPackageAdapterRegistry()}
 }
 
-func (i *PreflightInspector) Inspect(controllerState string, identity Identity) Preflight {
+func NewPreflightInspectorWithRunner(paths PreflightPaths, runner PackageCommandRunner) *PreflightInspector {
+	inspector := NewPreflightInspector(paths)
+	if runner != nil {
+		inspector.Runner = runner
+	}
+	return inspector
+}
+
+func (i *PreflightInspector) Inspect(controllerState string) Preflight {
 	result := Preflight{ControllerState: controllerState, Checks: make([]PreflightCheck, 0, 8)}
 	releaseData, err := readBoundedFile(i.Paths.KernelRelease, 4<<10)
 	release := strings.TrimSpace(string(releaseData))
@@ -90,10 +100,14 @@ func (i *PreflightInspector) Inspect(controllerState string, identity Identity) 
 	i.requireExecutable(&result, "modinfo", "modinfo", i.Paths.ModinfoExecutables)
 	i.requireExecutable(&result, "depmod", "depmod", i.Paths.DepmodExecutables)
 
-	result.DistributionID = readOSReleaseID(i.Paths.OSRelease)
+	osRelease, _ := readBoundedFile(i.Paths.OSRelease, 64<<10)
+	distribution := ParseDistribution(osRelease)
+	result.DistributionID = distribution.ID
+	managerExecutable := ""
 	for _, manager := range []string{"pacman", "apt", "dnf"} {
-		if firstExecutable(i.Paths.PackageManagers[manager]) != "" {
+		if executable := firstExecutable(i.Paths.PackageManagers[manager]); executable != "" {
 			result.PackageManager = manager
+			managerExecutable = executable
 			break
 		}
 	}
@@ -101,22 +115,24 @@ func (i *PreflightInspector) Inspect(controllerState string, identity Identity) 
 
 	result.Lockdown = readLockdown(i.Paths.KernelLockdown)
 	result.add("lockdown", result.Lockdown != "unknown", detail(result.Lockdown != "unknown", result.Lockdown, "Kernel lockdown state could not be determined"))
-	result.Signing = SigningEvidence{
-		ModuleSigningEnabled: configEnabled(config, "CONFIG_MODULE_SIG"),
-		SignatureForced:      configEnabled(config, "CONFIG_MODULE_SIG_FORCE"),
-		TrustedKeysSetting:   configValue(config, "CONFIG_SYSTEM_TRUSTED_KEYS"),
-	}
-	if identity.PackageName != "" && identity.PackageVersion != "" {
-		registration := filepath.Join(i.Paths.DKMSRoot, identity.PackageName, identity.PackageVersion)
-		if info, err := os.Stat(registration); err == nil && info.IsDir() {
-			result.DKMSRegistered = true
-			source := filepath.Join(registration, "source")
-			if resolved, err := filepath.EvalSymlinks(source); err == nil {
-				result.RegisteredSource = resolved
-			}
+
+	result.add("controller", controllerState == "idle", detail(controllerState == "idle", "idle", "The hypervisor manager must be idle before module setup"))
+	if managerExecutable != "" && !dependenciesReady(result) {
+		dependencyPlan, dependencyPlanErr := i.Registry.Plan(context.Background(), DependencyPlanRequest{
+			Distribution:  distribution,
+			Manager:       result.PackageManager,
+			Executable:    managerExecutable,
+			KernelRelease: release,
+			Toolchain:     result.Toolchain,
+			Runner:        i.Runner,
+		})
+		if dependencyPlanErr == nil {
+			result.DependencyPlan = &dependencyPlan
+		} else {
+			result.DependencyPlanError = dependencyPlanErr.Error()
 		}
 	}
-	result.add("controller", controllerState == "idle", detail(controllerState == "idle", "idle", "The hypervisor manager must be idle before module setup"))
+
 	result.Ready = true
 	for _, check := range result.Checks {
 		if !check.OK && check.ID != "package-manager" && check.ID != "lockdown" {
@@ -125,6 +141,18 @@ func (i *PreflightInspector) Inspect(controllerState string, identity Identity) 
 		}
 	}
 	return result
+}
+
+func dependenciesReady(preflight Preflight) bool {
+	for _, check := range preflight.Checks {
+		switch check.ID {
+		case "running-kernel", "kernel-build", "kernel-config", "dkms", "make", "gcc", "ld", "clang", "lld", "llvm", "modinfo", "depmod":
+			if !check.OK {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func (p *Preflight) add(id string, ok bool, value string) {
@@ -179,45 +207,10 @@ func configUsesClang(data []byte) bool {
 	return false
 }
 
-func configEnabled(data []byte, name string) bool {
-	return configValue(data, name) == "y"
-}
-
-func configValue(data []byte, name string) string {
-	prefix := name + "="
-	for _, line := range strings.Split(string(data), "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, prefix) {
-			return strings.Trim(strings.TrimPrefix(line, prefix), "'\"")
-		}
-	}
-	return ""
-}
-
 func firstExecutable(paths []string) string {
 	for _, candidate := range paths {
 		if executable, err := exec.LookPath(candidate); err == nil {
 			return executable
-		}
-	}
-	return ""
-}
-
-func readOSReleaseID(path string) string {
-	info, err := os.Stat(path)
-	if err != nil || info.Size() > 64<<10 {
-		return ""
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "ID=") {
-			return strings.Trim(strings.TrimPrefix(line, "ID="), "'\"")
 		}
 	}
 	return ""
@@ -261,8 +254,4 @@ func detail(ok bool, success, failure string) string {
 		return success
 	}
 	return failure
-}
-
-func (p Preflight) String() string {
-	return fmt.Sprintf("kernel=%s ready=%t", p.KernelRelease, p.Ready)
 }

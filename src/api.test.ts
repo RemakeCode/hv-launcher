@@ -5,6 +5,8 @@ import {
   applyUMIPConfiguration,
   getUMIPInspection,
   getStatus,
+  getModulePreflight,
+  installModuleArchive,
   installProtonArchive,
   preflightProtonArchive,
 } from "./api";
@@ -148,6 +150,49 @@ describe("UMIP setup API", () => {
       method: "POST",
       body: JSON.stringify({
         bootloader: "grub",
+        capability: "signed-capability",
+      }),
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+});
+
+describe("CPUID module setup API", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("loads host preflight without sending an archive path", async () => {
+    const preflight = { ready: false, kernelRelease: "6.18", lockdown: "none", controllerState: "idle", checks: [] };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(preflight)));
+    await expect(getModulePreflight()).resolves.toEqual(preflight);
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/module/preflight`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  it("submits only the selected archive path and capability", async () => {
+    const job = {
+      id: "job-module",
+      kind: "module-install",
+      state: "running",
+      phase: "starting",
+      progress: 0,
+      output: [],
+      startedAt: "2026-07-19T12:00:00Z",
+    };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(job)));
+
+    await expect(
+      installModuleArchive("/home/deck/Downloads/cpuid_fault_emulation.zip", "signed-capability"),
+    ).resolves.toEqual(job);
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/module/install`, {
+      method: "POST",
+      body: JSON.stringify({
+        path: "/home/deck/Downloads/cpuid_fault_emulation.zip",
         capability: "signed-capability",
       }),
       headers: { "Content-Type": "application/json" },

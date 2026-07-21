@@ -3,6 +3,7 @@ package hypervisor
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -38,8 +39,19 @@ type FileJournal struct {
 	path string
 }
 
+const deckyRuntimeDirectoryEnvironment = "DECKY_PLUGIN_RUNTIME_DIR"
+
 func NewFileJournal(runtimeDir string) *FileJournal {
 	return &FileJournal{path: filepath.Join(runtimeDir, "transition-journal.json")}
+}
+
+func NewDeckyFileJournal() (*FileJournal, error) {
+	runtimeDir := os.Getenv(deckyRuntimeDirectoryEnvironment)
+	if runtimeDir == "" {
+		return nil, fmt.Errorf("%s is required", deckyRuntimeDirectoryEnvironment)
+	}
+
+	return NewFileJournal(runtimeDir), nil
 }
 
 func (j *FileJournal) Load() (*JournalRecord, error) {

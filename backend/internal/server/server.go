@@ -25,12 +25,12 @@ import (
 )
 
 const (
+	ListenAddress   = "127.0.0.1:42991"
 	maxRequestBytes = 64 << 10
 	deckyOrigin     = "https://steamloopback.host"
 )
 
 type Options struct {
-	ListenAddress   string
 	Config          *config.Store
 	Inspector       *system.Inspector
 	Manager         *shortcuts.Manager
@@ -44,6 +44,7 @@ type Options struct {
 	Capabilities    *auth.Verifier
 	ModuleInspector *cpuidmodule.Inspector
 	ModulePreflight *cpuidmodule.PreflightInspector
+	ModuleInstaller *cpuidmodule.Installer
 }
 
 type Service struct {
@@ -56,13 +57,11 @@ type Service struct {
 func New(options Options) (*Service, error) {
 	if options.Config == nil || options.Inspector == nil || options.Manager == nil || options.Controller == nil ||
 		options.Proton == nil || options.Jobs == nil || options.UMIP == nil ||
-		options.Capabilities == nil || options.ModuleInspector == nil || options.ModulePreflight == nil {
+		options.Capabilities == nil || options.ModuleInspector == nil || options.ModulePreflight == nil ||
+		options.ModuleInstaller == nil {
 		return nil, errors.New("configuration, inspector, manager, controller, and setup services are required")
 	}
 
-	if err := validateLoopbackAddress(options.ListenAddress); err != nil {
-		return nil, err
-	}
 	if options.ProcessReader == nil {
 		options.ProcessReader = system.OSReader{}
 	}
@@ -76,7 +75,7 @@ func New(options Options) (*Service, error) {
 	service := &Service{options: options, limiter: newTransitionLimiter(30, time.Second)}
 	service.accepting.Store(true)
 	service.server = &http.Server{
-		Addr:              options.ListenAddress,
+		Addr:              ListenAddress,
 		Handler:           service.routes(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
@@ -100,6 +99,7 @@ func (s *Service) routes() http.Handler {
 		api.Get("/setup/umip", s.inspectUMIP)
 		api.Post("/setup/umip", s.applyUMIP)
 		api.Get("/setup/module/preflight", s.inspectModuleRequirements)
+		api.Post("/setup/module/install", s.installModule)
 		api.Get("/setup/jobs/active", s.activeSetupJob)
 		api.Get("/setup/jobs/{jobID}", s.setupJob)
 		api.Get("/setup/events", s.setupEvents)
@@ -131,12 +131,12 @@ func deckyCORS(next http.Handler) http.Handler {
 func (s *Service) Handler() http.Handler { return s.server.Handler }
 
 func (s *Service) Serve(ctx context.Context) error {
-	listener, err := net.Listen("tcp4", s.options.ListenAddress)
+	listener, err := net.Listen("tcp4", ListenAddress)
 	if err != nil {
-		return fmt.Errorf("listen on %s: %w", s.options.ListenAddress, err)
+		return fmt.Errorf("listen on %s: %w", ListenAddress, err)
 	}
 
-	s.options.Logger.Info("HTTP service listening", "address", s.options.ListenAddress)
+	s.options.Logger.Info("HTTP service listening", "address", ListenAddress)
 	serveErr := make(chan error, 1)
 	go func() { serveErr <- s.server.Serve(listener) }()
 	select {
@@ -160,13 +160,4 @@ func (s *Service) Serve(ctx context.Context) error {
 		}
 		return result
 	}
-}
-
-func validateLoopbackAddress(address string) error {
-	host, port, err := net.SplitHostPort(address)
-	if err != nil || host != "127.0.0.1" || port == "" {
-		return fmt.Errorf("service must bind to an explicit 127.0.0.1 port")
-	}
-
-	return nil
 }

@@ -51,6 +51,8 @@ type ModuleStatus struct {
 	EmulationInstalled  bool   `json:"emulationInstalled"`
 	EmulationLoaded     bool   `json:"emulationLoaded"`
 	EmulationCompatible bool   `json:"emulationCompatible"`
+	Lockdown            string `json:"lockdown"`
+	SigningRequired     bool   `json:"signingRequired"`
 	KVMLoaded           bool   `json:"kvmLoaded"`
 	KVMAMDLoaded        bool   `json:"kvmAmdLoaded"`
 	KVMBusy             bool   `json:"kvmBusy"`

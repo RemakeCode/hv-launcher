@@ -7,6 +7,26 @@ import { ShortcutManagementPage } from "./shortcut-management/shortcut-managemen
 import { setupEventStore } from "./setup-events";
 import { logger } from "./shared/logger";
 import { observeSteamLifetime } from "./steam";
+import type { SetupJobSnapshot } from "./types";
+
+function setupToastBody(job: SetupJobSnapshot): string {
+  const succeeded = job.state === "succeeded";
+
+  switch (job.kind) {
+    case "umip-apply":
+      return succeeded
+        ? "The boot configuration was updated. Restart the system to finish disabling UMIP."
+        : "The UMIP configuration did not complete. Open Readiness setup for recovery details.";
+    case "module-install":
+      return succeeded
+        ? "The CPUID module installation finished. Reopen Readiness setup to review signing status."
+        : "The CPUID module installation did not complete. Open Readiness setup for details.";
+    default:
+      return succeeded
+        ? "The Proton installation finished. Restart Steam before selecting the new tool."
+        : "The Proton installation did not complete. Open Readiness setup for details.";
+  }
+}
 
 export default definePlugin(() => {
   routerHook.addRoute(MANAGEMENT_ROUTE, ShortcutManagementPage);
@@ -14,16 +34,9 @@ export default definePlugin(() => {
 
   setupEventStore.start((job) => {
     const succeeded = job.state === "succeeded";
-    const umip = job.kind === "umip-apply";
     toaster.toast({
       title: succeeded ? "HV Launcher setup complete" : "HV Launcher setup failed",
-      body: succeeded
-        ? umip
-          ? "The boot configuration was updated. Restart the system to finish disabling UMIP."
-          : "The Proton installation finished. Restart Steam before selecting the new tool."
-        : umip
-          ? "The UMIP configuration did not complete. Open Readiness setup for recovery details."
-          : "The Proton installation did not complete. Open Readiness setup for details.",
+      body: setupToastBody(job),
       critical: !succeeded,
       playSound: true,
       showToast: true,

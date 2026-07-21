@@ -134,7 +134,7 @@ func (c *WorkerClient) run(ctx context.Context, request workerRequest, progress 
 		var response workerResponse
 		if err := decoder.Decode(&response); err != nil {
 			if !errors.Is(err, io.EOF) {
-				_ = command.Wait()
+				stopWorker(command, stdout)
 				return workerResponse{}, fmt.Errorf("decode Proton worker response: %w", err)
 			}
 			break
@@ -164,6 +164,14 @@ func (c *WorkerClient) run(ctx context.Context, request workerRequest, progress 
 	}
 
 	return final, nil
+}
+
+func stopWorker(command *exec.Cmd, stdout io.Closer) {
+	_ = stdout.Close()
+	if command.Process != nil {
+		_ = command.Process.Kill()
+	}
+	_ = command.Wait()
 }
 
 func (c *WorkerClient) command(ctx context.Context) *exec.Cmd {

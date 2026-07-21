@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   getQAMVisualFixture,
+  getReadinessWorkspaceModuleFixture,
   getReadinessWorkspaceProtonFixture,
   getReadinessWorkspaceUMIPFixture,
   type VisualFixtureName
@@ -107,5 +108,34 @@ describe('QAM visual fixtures', () => {
     expect(choice?.inspection?.candidates.map((candidate) => candidate.bootloader)).toEqual(['limine', 'grub']);
     expect(manual?.inspection?.selection).toBe('manual-only');
     expect(manual?.inspection?.manual[0].detail).toContain('manually');
+  });
+
+  it.each([
+    ['module-missing', 'idle'],
+    ['module-ready', 'idle'],
+    ['module-review', 'review'],
+    ['module-installing', 'installing'],
+    ['module-success', 'complete'],
+    ['module-signing', 'complete'],
+    ['module-failure', 'failure'],
+    ['module-conflict', 'failure'],
+    ['module-manual', 'idle']
+  ] as const)('models the %s CPUID-module process', (name, stage) => {
+    const fixture = getReadinessWorkspaceModuleFixture(name);
+
+    expect(getQAMVisualFixture(name)?.status.status).toBe('setup-required');
+    expect(fixture?.draft.stage).toBe(stage);
+  });
+
+  it('models package review, immutable manual guidance, and signing follow-up', () => {
+    const review = getReadinessWorkspaceModuleFixture('module-review');
+    const manual = getReadinessWorkspaceModuleFixture('module-manual');
+    const signing = getReadinessWorkspaceModuleFixture('module-signing');
+
+    expect(review?.preflight.dependencyPlan?.packages).toContain('dkms');
+    expect(getReadinessWorkspaceModuleFixture('module-ready')?.preflight.ready).toBe(true);
+    expect(manual?.preflight.dependencyPlan).toBeUndefined();
+    expect(manual?.preflight.dependencyPlanError).toContain('manual');
+    expect(signing?.draft.result?.signingRequired).toBe(true);
   });
 });
