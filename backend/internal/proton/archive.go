@@ -4,8 +4,6 @@ import (
 	"archive/tar"
 	"bufio"
 	"compress/gzip"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"math"
@@ -42,90 +40,12 @@ type archiveState struct {
 	hardLinks    int
 }
 
-func Inspect(reader io.ReadSeeker) (Inspection, error) {
-	return InspectWithLimits(reader, DefaultLimits())
-}
-
-func InspectWithLimits(reader io.ReadSeeker, limits Limits) (Inspection, error) {
-	if err := validateLimits(limits); err != nil {
-		return Inspection{}, err
-	}
-
-	digest, err := archiveDigest(reader, limits)
-	if err != nil {
-		return Inspection{}, err
-	}
-	if _, err := reader.Seek(0, io.SeekStart); err != nil {
-		return Inspection{}, validationError(ErrorArchiveIO, "", "", "rewind archive", err)
-	}
-
-	format, decoded, closer, err := openCompressedStream(reader)
-	if err != nil {
-		return Inspection{}, err
-	}
-	if closer != nil {
-		defer closer.Close()
-	}
-
-	limited := &io.LimitedReader{R: decoded, N: limits.MaxExpandedBytes + 1}
-	state := archiveState{limits: limits, entries: make(map[string]archiveEntry)}
-	if err := state.readTar(tar.NewReader(limited)); err != nil {
-		if limited.N == 0 {
-			return Inspection{}, limitError("expanded-bytes", fmt.Sprintf("archive expands beyond %d bytes", limits.MaxExpandedBytes))
-		}
-		return Inspection{}, err
-	}
-	if _, err := io.Copy(io.Discard, limited); err != nil {
-		return Inspection{}, validationError(ErrorMalformedArchive, "", "", "finish compressed stream", err)
-	}
-	if limited.N == 0 {
-		return Inspection{}, limitError("expanded-bytes", fmt.Sprintf("archive expands beyond %d bytes", limits.MaxExpandedBytes))
-	}
-	expandedBytes := limits.MaxExpandedBytes + 1 - limited.N
-
-	inspection, err := state.validateLayout()
-	if err != nil {
-		return Inspection{}, err
-	}
-	inspection.Compression = format
-	inspection.SHA256 = digest
-	inspection.ExpandedBytes = expandedBytes
-	inspection.EntryCount = state.entryCount
-	inspection.RegularBytes = state.regularBytes
-	return inspection, nil
-}
-
 func validateLimits(limits Limits) error {
 	if limits.MaxCompressedBytes <= 0 || limits.MaxExpandedBytes <= 0 || limits.MaxExpandedBytes == math.MaxInt64 ||
 		limits.MaxEntries <= 0 || limits.MaxManifestBytes <= 0 || limits.MaxPathBytes <= 0 {
 		return validationError(ErrorInvalidLimits, "", "", "all archive limits must be positive and bounded", nil)
 	}
 	return nil
-}
-
-func archiveDigest(reader io.ReadSeeker, limits Limits) (string, error) {
-	size, err := reader.Seek(0, io.SeekEnd)
-	if err != nil {
-		return "", validationError(ErrorArchiveIO, "", "", "determine archive size", err)
-	}
-	if size > limits.MaxCompressedBytes {
-		return "", limitError("compressed-bytes", fmt.Sprintf("archive is %d bytes; maximum is %d", size, limits.MaxCompressedBytes))
-	}
-	if size <= 0 {
-		return "", validationError(ErrorUnsupportedFormat, "", "", "archive is empty", nil)
-	}
-	if _, err := reader.Seek(0, io.SeekStart); err != nil {
-		return "", validationError(ErrorArchiveIO, "", "", "rewind archive", err)
-	}
-	hash := sha256.New()
-	written, err := io.Copy(hash, reader)
-	if err != nil {
-		return "", validationError(ErrorArchiveIO, "", "", "hash archive", err)
-	}
-	if written != size {
-		return "", validationError(ErrorArchiveIO, "", "", "archive size changed while hashing", nil)
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
 }
 
 func openCompressedStream(reader io.Reader) (Compression, io.Reader, io.Closer, error) {
@@ -149,58 +69,6 @@ func openCompressedStream(reader io.Reader) (Compression, io.Reader, io.Closer, 
 		return CompressionXZ, stream, nil, nil
 	}
 	return "", nil, nil, validationError(ErrorUnsupportedFormat, "", "", "content is neither gzip nor xz", nil)
-}
-
-func (s *archiveState) readTar(reader *tar.Reader) error {
-	for {
-		header, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return validationError(ErrorMalformedArchive, "", "", "read tar header", err)
-		}
-		s.entryCount++
-		if s.entryCount > s.limits.MaxEntries {
-			return limitError("entry-count", fmt.Sprintf("archive has more than %d entries", s.limits.MaxEntries))
-		}
-
-		name, err := normalizeEntryPath(header.Name, s.limits)
-		if err != nil {
-			return err
-		}
-		kind, err := supportedEntryKind(header.Typeflag, name)
-		if err != nil {
-			return err
-		}
-		if err := s.recordPath(name, kind, header); err != nil {
-			return err
-		}
-
-		if kind != entryRegular {
-			continue
-		}
-		if header.Size < 0 || header.Size > s.limits.MaxExpandedBytes-s.regularBytes {
-			return limitError("expanded-bytes", fmt.Sprintf("regular files expand beyond %d bytes", s.limits.MaxExpandedBytes))
-		}
-		s.regularBytes += header.Size
-
-		manifestPath := path.Join(s.root, "compatibilitytool.vdf")
-		if name == manifestPath {
-			if header.Size > s.limits.MaxManifestBytes {
-				return limitError("manifest-bytes", fmt.Sprintf("%s is %d bytes; maximum is %d", name, header.Size, s.limits.MaxManifestBytes))
-			}
-			s.manifest = make([]byte, header.Size)
-			if _, err := io.ReadFull(reader, s.manifest); err != nil {
-				return validationError(ErrorMalformedArchive, name, "", "read compatibility manifest", err)
-			}
-			continue
-		}
-		if _, err := io.CopyN(io.Discard, reader, header.Size); err != nil {
-			return validationError(ErrorMalformedArchive, name, "", "read regular file", err)
-		}
-	}
-	return s.validateLinks()
 }
 
 func (s *archiveState) recordPath(name string, kind entryKind, header *tar.Header) error {
