@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   emptyProtonDraft,
   emptyUMIPDraft,
+  emptyModuleDraft,
   initialReadinessSelection,
   isFilePickerCancellation,
   isSupportedProtonArchive,
@@ -11,11 +12,13 @@ import {
   readinessSelectionFromPage,
   readinessWorkspaceChecks,
   umipDraftReducer,
+  moduleDraftReducer,
 } from "./readiness-workspace-state";
 import type {
   ProtonPreflightResponse,
   SetupJobSnapshot,
   UMIPInspection,
+  ModuleInstallResult,
 } from "../types";
 
 const selection: ProtonPreflightResponse = {
@@ -58,6 +61,36 @@ const limineInspection: UMIPInspection = {
     detail: "clearcpuid=514 can be added after review.",
   }],
   manual: [],
+};
+
+const moduleResult: ModuleInstallResult = {
+  inspection: {
+    fileName: "cpuid_fault_emulation.zip",
+    identity: {
+      packageName: "cpuid_fault_emulation",
+      packageVersion: "0.1",
+      builtModuleName: "cpuid_fault_emulation",
+      destination: "/updates",
+      automaticInstall: true,
+    },
+    entryCount: 3,
+    expandedBytes: 100,
+    requiredFiles: ["dkms.conf", "Makefile"],
+    warning: "source warning",
+  },
+  identity: {
+    packageName: "cpuid_fault_emulation",
+    packageVersion: "0.1",
+    builtModuleName: "cpuid_fault_emulation",
+    destination: "/updates",
+    automaticInstall: true,
+  },
+  kernelRelease: "6.18.7-test",
+  moduleName: "cpuid_fault_emulation",
+  modulePath: "/lib/modules/6.18.7-test/updates/cpuid_fault_emulation.ko",
+  vermagic: "6.18.7-test SMP",
+  noOp: false,
+  signingRequired: false,
 };
 
 function umipJob(state: SetupJobSnapshot["state"]): SetupJobSnapshot {
@@ -272,5 +305,42 @@ describe("readiness workspace state", () => {
     const failed = umipDraftReducer(state, { type: "job-started", job: umipJob("failed") });
     expect(failed.stage).toBe("failure");
     expect(failed.error).toContain("rolled back");
+  });
+
+  it("retains the selected module archive through review and terminal job states", () => {
+    let state = moduleDraftReducer(emptyModuleDraft, { type: "selection-ready", path: "/home/deck/Downloads/cpuid_fault_emulation.zip" });
+    expect(state.stage).toBe("review");
+    state = moduleDraftReducer(state, { type: "install-requested" });
+    const succeeded: SetupJobSnapshot = {
+      id: "module-job",
+      kind: "module-install",
+      state: "succeeded",
+      phase: "complete",
+      progress: 100,
+      output: ["verified"],
+      result: moduleResult,
+      startedAt: "2026-07-19T12:00:00Z",
+    };
+    state = moduleDraftReducer(state, { type: "job-started", job: succeeded });
+    expect(state.stage).toBe("complete");
+    expect(state.archivePath).toContain("cpuid_fault_emulation.zip");
+    expect(state.result).toEqual(moduleResult);
+  });
+
+  it("does not attach an unrelated module job over an active installation", () => {
+    let state = moduleDraftReducer(emptyModuleDraft, { type: "selection-ready", path: "/tmp/module.zip" });
+    state = moduleDraftReducer(state, { type: "install-requested" });
+    const running: SetupJobSnapshot = {
+      id: "module-running",
+      kind: "module-install",
+      state: "running",
+      phase: "building-module",
+      progress: 60,
+      output: [],
+      startedAt: "2026-07-19T12:00:00Z",
+    };
+    state = moduleDraftReducer(state, { type: "job-updated", job: running });
+    const unrelated = { ...running, id: "other", kind: "proton-install" };
+    expect(moduleDraftReducer(state, { type: "job-updated", job: unrelated }).job?.id).toBe("module-running");
   });
 });

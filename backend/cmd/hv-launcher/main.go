@@ -28,8 +28,6 @@ import (
 	"hv-launcher/internal/wrapper"
 )
 
-const defaultListenAddress = "127.0.0.1:42991"
-
 func main() {
 	logger := backendlogger.Configure(os.Stdout)
 	if err := run(os.Args[1:]); err != nil {
@@ -67,10 +65,14 @@ func serveBackend() error {
 		return fmt.Errorf("configure privileged setup authorization: %w", err)
 	}
 
-	runtimeDir := os.Getenv("DECKY_PLUGIN_RUNTIME_DIR")
 	userHome := os.Getenv("DECKY_USER_HOME")
-	if runtimeDir == "" || userHome == "" {
-		return errors.New("DECKY_PLUGIN_RUNTIME_DIR and DECKY_USER_HOME are required")
+	if userHome == "" {
+		return errors.New("DECKY_USER_HOME is required")
+	}
+
+	journal, err := hypervisor.NewDeckyFileJournal()
+	if err != nil {
+		return fmt.Errorf("configure transition journal: %w", err)
 	}
 
 	userInfo, err := os.Stat(userHome)
@@ -84,7 +86,7 @@ func serveBackend() error {
 
 	logger := slog.Default()
 	reader := system.OSReader{}
-	logger.Info("backend starting", "listen_address", defaultListenAddress, "effective_uid", os.Geteuid())
+	logger.Info("backend starting", "listen_address", server.ListenAddress, "effective_uid", os.Geteuid())
 
 	dataDir, err := config.DataDir(userHome, os.Getenv("XDG_DATA_HOME"))
 	if err != nil {
@@ -116,7 +118,7 @@ func serveBackend() error {
 	controller, err := hypervisor.New(hypervisor.Options{
 		Runner:        hypervisor.ExecRunner{},
 		Modules:       moduleState,
-		Journal:       hypervisor.NewFileJournal(runtimeDir),
+		Journal:       journal,
 		KernelRelease: string(bytes.TrimSpace(kernelData)),
 		Logger:        logger,
 	})
@@ -129,9 +131,8 @@ func serveBackend() error {
 	}
 
 	svc, err := server.New(server.Options{
-		ListenAddress:   defaultListenAddress,
 		Config:          store,
-		Inspector:       system.NewInspector(userHome, runtimeDir),
+		Inspector:       system.NewInspector(userHome),
 		Manager:         &shortcuts.Manager{Store: store, WrapperPath: executable},
 		Controller:      controller,
 		Logger:          logger,
@@ -141,6 +142,7 @@ func serveBackend() error {
 		Capabilities:    capabilities,
 		ModuleInspector: cpuidmodule.NewInspector(),
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
+		ModuleInstaller: cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{}),
 	})
 	if err != nil {
 		return err
@@ -167,7 +169,7 @@ func runningManagedShortcuts(store *config.Store, reader system.Reader) map[stri
 func runWrapped(args []string) error {
 	flags := flag.NewFlagSet("run", flag.ContinueOnError)
 	appID := flags.String("app-id", "", "managed Steam App ID")
-	baseURL := flags.String("service-url", "http://"+defaultListenAddress+"/v1", "Go service URL")
+	baseURL := flags.String("service-url", "http://"+server.ListenAddress+"/v1", "Go service URL")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}

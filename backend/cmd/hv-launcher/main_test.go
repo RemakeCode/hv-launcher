@@ -15,7 +15,7 @@ func TestDefaultInvocationStartsServicePath(t *testing.T) {
 	t.Setenv(auth.EnvironmentVariable, base64.RawURLEncoding.EncodeToString(make([]byte, auth.SecretBytes)))
 
 	err := run(nil)
-	if err == nil || !strings.Contains(err.Error(), "DECKY_PLUGIN_RUNTIME_DIR") {
+	if err == nil || !strings.Contains(err.Error(), "DECKY_USER_HOME") {
 		t.Fatalf("default invocation returned %v", err)
 	}
 	if _, present := os.LookupEnv(auth.EnvironmentVariable); present {

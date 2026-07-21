@@ -1,8 +1,11 @@
-import type { ProtonDraft, UMIPDraft } from '../readiness-workspace/readiness-workspace-state';
+import type { ModuleDraft, ProtonDraft, UMIPDraft } from '../readiness-workspace/readiness-workspace-state';
 import type {
   AggregateStatus,
   Check,
   Configuration,
+  ModuleInstallResult,
+  DependencyPlan,
+  ModulePreflight,
   ProtonInstallResult,
   ProtonPreflightResponse,
   SetupJobSnapshot,
@@ -19,7 +22,17 @@ type UMIPWorkspaceFixtureName =
   | 'umip-existing'
   | 'umip-success'
   | 'umip-failure';
-type WorkspaceFixtureName = ProtonWorkspaceFixtureName | UMIPWorkspaceFixtureName;
+type ModuleWorkspaceFixtureName =
+  | 'module-missing'
+  | 'module-ready'
+  | 'module-review'
+  | 'module-installing'
+  | 'module-success'
+  | 'module-failure'
+  | 'module-manual'
+  | 'module-signing'
+  | 'module-conflict';
+type WorkspaceFixtureName = ProtonWorkspaceFixtureName | UMIPWorkspaceFixtureName | ModuleWorkspaceFixtureName;
 export type VisualFixtureName = AggregateStatus | 'native-intel7' | 'z1-extreme' | 'z1-extreme-native' | WorkspaceFixtureName | '';
 type QAMFixtureName = Exclude<VisualFixtureName, '' | WorkspaceFixtureName>;
 
@@ -322,8 +335,133 @@ export function getQAMVisualFixture(name: VisualFixtureName = selectedFixture): 
       }
     };
   }
-  if (name.startsWith('proton-') || name.startsWith('umip-')) return fixtures['setup-required'];
+  if (name.startsWith('proton-') || name.startsWith('umip-') || name.startsWith('module-')) return fixtures['setup-required'];
   return fixtures[name as QAMFixtureName];
+}
+
+const moduleDependencyPlan: DependencyPlan = {
+  manager: 'pacman',
+  packages: ['linux-cachyos-headers', 'dkms', 'base-devel'],
+  previewOutput: 'linux-cachyos-headers\ndkms\nbase-devel'
+};
+
+const moduleKernelRelease = '6.18.7-visual-fixture';
+
+function modulePreflight(overrides: Partial<ModulePreflight> = {}): ModulePreflight {
+  return {
+    ready: false,
+    kernelRelease: '6.18.7-visual-fixture',
+    toolchain: 'gcc',
+    packageManager: 'pacman',
+    distributionId: 'cachyos',
+    lockdown: 'none',
+    controllerState: 'idle',
+    dependencyPlan: moduleDependencyPlan,
+    checks: [
+      { id: 'kernel-build', ok: true, detail: 'matching build files' },
+      { id: 'dkms', ok: true, detail: '/usr/bin/dkms' },
+      { id: 'package-manager', ok: true, detail: 'pacman' }
+    ],
+    ...overrides
+  };
+}
+
+const moduleIdentity = {
+  packageName: 'cpuid_fault_emulation',
+  packageVersion: '0.1.0',
+  builtModuleName: 'cpuid_fault_emulation',
+  destination: '/updates',
+  automaticInstall: true
+};
+
+const moduleInspection = {
+  fileName: 'cpuid_fault_emulation.zip',
+  identity: moduleIdentity,
+  entryCount: 3,
+  expandedBytes: 18432,
+  requiredFiles: ['dkms.conf', 'Makefile'],
+  warning: 'HV Launcher cannot verify this archive\'s origin. DKMS will execute its Makefile as root.'
+};
+
+function moduleResult(signingRequired = false): ModuleInstallResult {
+  return {
+    inspection: moduleInspection,
+    identity: moduleIdentity,
+    kernelRelease: moduleKernelRelease,
+    moduleName: 'cpuid_fault_emulation',
+    modulePath: `/lib/modules/${moduleKernelRelease}/updates/cpuid_fault_emulation.ko`,
+    vermagic: `${moduleKernelRelease} SMP mod_unload`,
+    signer: signingRequired ? undefined : 'CachyOS test key',
+    noOp: false,
+    signingRequired
+  };
+}
+
+function moduleJob(state: SetupJobSnapshot['state'], error?: string, result?: ModuleInstallResult): SetupJobSnapshot {
+  return {
+    id: 'VisualModuleJob',
+    kind: 'module-install',
+    state,
+    phase: state === 'running' ? 'building-module' : state === 'succeeded' ? 'complete' : 'failed',
+    progress: state === 'running' ? 62 : 100,
+    output: state === 'running' ? ['Building cpuid_fault_emulation for the running kernel'] : [],
+    error,
+    result,
+    startedAt: '2026-07-20T12:00:00Z',
+    finishedAt: state === 'running' ? undefined : '2026-07-20T12:00:12Z'
+  };
+}
+
+export function getReadinessWorkspaceModuleFixture(
+  name: VisualFixtureName = selectedFixture
+): { draft: ModuleDraft; preflight: ModulePreflight } | undefined {
+  if (!name.startsWith('module-')) return undefined;
+  const archivePath = '/home/deck/Downloads/cpuid_fault_emulation.zip';
+  const reviewed: ModuleDraft = {
+    stage: 'review',
+    archivePath
+  };
+  let draft: ModuleDraft;
+  let preflight = modulePreflight();
+  switch (name) {
+    case 'module-missing':
+      draft = { stage: 'idle' };
+      break;
+    case 'module-ready':
+      draft = { stage: 'idle' };
+      preflight = modulePreflight({ ready: true, dependencyPlan: undefined });
+      break;
+    case 'module-review':
+      draft = reviewed;
+      break;
+    case 'module-installing':
+      draft = { ...reviewed, stage: 'installing', job: moduleJob('running') };
+      break;
+    case 'module-success':
+      draft = { ...reviewed, stage: 'complete', job: moduleJob('succeeded', undefined, moduleResult()), result: moduleResult() };
+      break;
+    case 'module-signing':
+      draft = { ...reviewed, stage: 'complete', job: moduleJob('succeeded', undefined, moduleResult(true)), result: moduleResult(true) };
+      break;
+    case 'module-failure':
+      draft = { ...reviewed, stage: 'failure', job: moduleJob('failed', 'The selected archive is invalid.'), error: 'The selected archive is invalid.' };
+      break;
+    case 'module-conflict':
+      draft = { ...reviewed, stage: 'failure', job: moduleJob('failed', 'This module version is already registered with DKMS.'), error: 'This module version is already registered with DKMS.' };
+      break;
+    case 'module-manual':
+      draft = { stage: 'idle' };
+      preflight = modulePreflight({
+        distributionId: 'steamos',
+        packageManager: undefined,
+        dependencyPlan: undefined,
+        dependencyPlanError: 'This immutable system needs manual dependency setup.'
+      });
+      break;
+    default:
+      return undefined;
+  }
+  return { draft, preflight };
 }
 
 const protonSelection: ProtonPreflightResponse = {

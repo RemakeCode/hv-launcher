@@ -8,11 +8,10 @@ import (
 
 func TestPreflightFindsReadyRunningKernelAndGCCRequirements(t *testing.T) {
 	paths := readyPreflightPaths(t, false)
-	preflight := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("0.1"))
+	preflight := NewPreflightInspector(paths).Inspect("idle")
 	if !preflight.Ready || preflight.KernelRelease != "6.18.7-test" || preflight.Toolchain != "gcc" ||
 		preflight.PackageManager != "pacman" || preflight.DistributionID != "cachyos" || preflight.Lockdown != "none" ||
-		!preflight.Signing.ModuleSigningEnabled || preflight.Signing.SignatureForced ||
-		preflight.Signing.TrustedKeysSetting != "certs/signing_key.pem" {
+		preflight.DependencyPlan != nil {
 		t.Fatalf("unexpected preflight: %+v", preflight)
 	}
 	for _, check := range preflight.Checks {
@@ -27,14 +26,14 @@ func TestPreflightRequiresClangToolchainForClangKernel(t *testing.T) {
 	for _, executable := range append(append([]string{}, paths.ClangExecutables...), append(paths.LLDExecutables, paths.LLVMExecutables...)...) {
 		_ = os.Remove(executable)
 	}
-	preflight := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("0.1"))
+	preflight := NewPreflightInspector(paths).Inspect("idle")
 	if preflight.Ready || preflight.Toolchain != "clang" || checkOK(preflight, "clang") || checkOK(preflight, "lld") || checkOK(preflight, "llvm") {
 		t.Fatalf("missing Clang requirements passed: %+v", preflight)
 	}
 	for _, executable := range []string{paths.ClangExecutables[0], paths.LLDExecutables[0], paths.LLVMExecutables[0]} {
 		writeExecutable(t, executable)
 	}
-	if ready := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("0.1")); !ready.Ready {
+	if ready := NewPreflightInspector(paths).Inspect("idle"); !ready.Ready {
 		t.Fatalf("complete Clang requirements failed: %+v", ready)
 	}
 }
@@ -46,57 +45,47 @@ func TestPreflightBlocksKernelMismatchAndActiveControllerButNotMissingPackageMan
 			_ = os.Remove(executable)
 		}
 	}
-	withoutManager := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("0.1"))
+	withoutManager := NewPreflightInspector(paths).Inspect("idle")
 	if !withoutManager.Ready || checkOK(withoutManager, "package-manager") {
 		t.Fatalf("package manager incorrectly blocked complete preflight: %+v", withoutManager)
 	}
 
 	buildRelease := filepath.Join(paths.ModulesRoot, "6.18.7-test", "build", "include", "config", "kernel.release")
 	writePreflightFile(t, buildRelease, "another-kernel\n", 0o644)
-	mismatch := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("0.1"))
+	mismatch := NewPreflightInspector(paths).Inspect("idle")
 	if mismatch.Ready || checkOK(mismatch, "kernel-build") {
 		t.Fatalf("mismatched build tree passed: %+v", mismatch)
 	}
 	writePreflightFile(t, buildRelease, "6.18.7-test\n", 0o644)
-	active := NewPreflightInspector(paths).Inspect("active", testModuleIdentity("0.1"))
+	active := NewPreflightInspector(paths).Inspect("active")
 	if active.Ready || checkOK(active, "controller") {
 		t.Fatalf("active controller passed: %+v", active)
 	}
 }
 
-func TestPreflightReportsExistingDKMSRegistration(t *testing.T) {
-	paths := readyPreflightPaths(t, false)
-	source := filepath.Join(t.TempDir(), "source")
-	if err := os.MkdirAll(source, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	registration := filepath.Join(paths.DKMSRoot, "cpuid_fault_emulation", "0.1")
-	if err := os.MkdirAll(registration, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(source, filepath.Join(registration, "source")); err != nil {
-		t.Fatal(err)
-	}
-	preflight := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("0.1"))
-	if !preflight.DKMSRegistered || preflight.RegisteredSource != source {
-		t.Fatalf("registration not reported: %+v", preflight)
+func TestPreflightDoesNotPlanPackagesForControllerState(t *testing.T) {
+	preflight := NewPreflightInspector(readyPreflightPaths(t, false)).Inspect("active")
+	if preflight.DependencyPlan != nil {
+		t.Fatalf("active controller created an unnecessary dependency plan: %+v", preflight)
 	}
 }
 
-func TestPreflightUsesArchiveDeclaredDKMSVersion(t *testing.T) {
+func TestPreflightExposesAnAdapterPlanWhenBuildRequirementsAreMissing(t *testing.T) {
 	paths := readyPreflightPaths(t, false)
-	registration := filepath.Join(paths.DKMSRoot, "cpuid_fault_emulation", "1.0")
-	if err := os.MkdirAll(registration, 0o755); err != nil {
+	release := "6.18.7-test"
+	if err := os.RemoveAll(filepath.Join(paths.ModulesRoot, release, "build")); err != nil {
 		t.Fatal(err)
 	}
-	preflight := NewPreflightInspector(paths).Inspect("idle", testModuleIdentity("1.0"))
-	if !preflight.DKMSRegistered {
-		t.Fatalf("versioned registration not reported: %+v", preflight)
+	paths.PackageManagers = map[string][]string{"apt": {filepath.Join(filepath.Dir(paths.DKMSExecutables[0]), "apt-get")}}
+	writeExecutable(t, paths.PackageManagers["apt"][0])
+	writePreflightFile(t, paths.OSRelease, "ID=ubuntu\nID_LIKE=debian\n", 0o644)
+	runner := fakePackageRunner{responses: map[string][]byte{
+		"--simulate install linux-headers-" + release + " dkms build-essential": []byte("The following NEW packages will be installed: linux-headers-" + release + " dkms build-essential\n"),
+	}}
+	preflight := NewPreflightInspectorWithRunner(paths, runner).Inspect("idle")
+	if preflight.DependencyPlan == nil || !contains(preflight.DependencyPlan.Packages, "linux-headers-"+release) {
+		t.Fatalf("expected dependency plan: %+v", preflight)
 	}
-}
-
-func testModuleIdentity(version string) Identity {
-	return Identity{PackageName: "cpuid_fault_emulation", PackageVersion: version}
 }
 
 func readyPreflightPaths(t *testing.T, clang bool) PreflightPaths {

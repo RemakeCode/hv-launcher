@@ -165,10 +165,65 @@ export interface SetupJobSnapshot {
   phase: string;
   progress: number;
   output: string[];
-  result?: ProtonInstallResult | UMIPApplyResult;
+  result?: ProtonInstallResult | UMIPApplyResult | ModuleInstallResult;
   error?: string;
   startedAt: string;
   finishedAt?: string;
+}
+
+export interface DependencyPlan {
+  manager: string;
+  packages: string[];
+  previewOutput?: string;
+}
+
+export interface ModulePreflightCheck {
+  id: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface ModulePreflight {
+  ready: boolean;
+  kernelRelease: string;
+  buildRoot?: string;
+  toolchain?: string;
+  packageManager?: string;
+  distributionId?: string;
+  lockdown: string;
+  controllerState: string;
+  dependencyPlan?: DependencyPlan;
+  dependencyPlanError?: string;
+  checks: ModulePreflightCheck[];
+}
+
+export interface ModuleIdentity {
+  packageName: string;
+  packageVersion: string;
+  builtModuleName: string;
+  destination: string;
+  automaticInstall: boolean;
+}
+
+export interface ModuleArchiveInspection {
+  fileName: string;
+  identity: ModuleIdentity;
+  entryCount: number;
+  expandedBytes: number;
+  requiredFiles: string[];
+  warning: string;
+}
+
+export interface ModuleInstallResult {
+  inspection: ModuleArchiveInspection;
+  identity: ModuleIdentity;
+  kernelRelease: string;
+  moduleName: string;
+  modulePath: string;
+  vermagic: string;
+  signer?: string;
+  noOp: boolean;
+  signingRequired: boolean;
 }
 
 export interface ActiveSetupJob {

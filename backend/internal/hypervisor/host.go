@@ -32,7 +32,15 @@ type SysModuleState struct {
 }
 
 func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return exec.CommandContext(ctx, name, args...).CombinedOutput()
+	command := exec.CommandContext(ctx, name, args...)
+	command.Env = []string{
+		"HOME=/root",
+		"LANG=C",
+		"LC_ALL=C",
+		"PATH=/usr/sbin:/usr/bin:/sbin:/bin",
+	}
+
+	return command.CombinedOutput()
 }
 
 func (ExecRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }

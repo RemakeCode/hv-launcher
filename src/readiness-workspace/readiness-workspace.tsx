@@ -2,11 +2,12 @@ import { Field, PanelSection, SidebarNavigation } from '@decky/ui';
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece, FaShieldAlt, FaWineBottle } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
-import { getStatus, getUMIPInspection } from '../api';
+import { getModulePreflight, getStatus, getUMIPInspection } from '../api';
 import { READINESS_ROUTE } from '../qam/qam';
 import { ReadinessItem, readinessColor } from '../readiness/readiness-item';
 import {
   getQAMVisualFixture,
+  getReadinessWorkspaceModuleFixture,
   getReadinessWorkspaceProtonFixture,
   getReadinessWorkspaceUMIPFixture
 } from '../readiness/visual-fixtures';
@@ -14,18 +15,21 @@ import { LoadingSpinner } from '../shared/loading-spinner';
 import { logger } from '../shared/logger';
 import { readinessError } from '../shortcut-management/management';
 import { setupEventStore } from '../setup-events';
-import type { Check, SystemStatus } from '../types';
+import type { Check, ModulePreflight, SystemStatus } from '../types';
 import { ProtonSetup } from './proton-setup';
+import { ModuleSetup } from './module-setup';
 import { UMIPSetup } from './umip-setup';
 import {
   emptyUMIPDraft,
   emptyProtonDraft,
+  emptyModuleDraft,
   initialReadinessSelection,
   protonDraftReducer,
   readinessPageLink,
   readinessSelectionFromPage,
   readinessWorkspaceChecks,
-  umipDraftReducer
+  umipDraftReducer,
+  moduleDraftReducer
 } from './readiness-workspace-state';
 
 const workspaceIcons: Record<string, IconType> = {
@@ -53,6 +57,11 @@ export function ReadinessWorkspace() {
     umipDraftReducer,
     getReadinessWorkspaceUMIPFixture() ?? emptyUMIPDraft
   );
+  const [moduleDraft, dispatchModule] = useReducer(
+    moduleDraftReducer,
+    getReadinessWorkspaceModuleFixture()?.draft ?? emptyModuleDraft
+  );
+  const [modulePreflight, setModulePreflight] = useState<ModulePreflight>();
   const [mutationActive, setMutationActive] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -67,13 +76,27 @@ export function ReadinessWorkspace() {
         const visualUMIP = getReadinessWorkspaceUMIPFixture();
         if (fixture && visualUMIP?.inspection) {
           dispatchUMIP({ type: 'inspection-loaded', inspection: visualUMIP.inspection });
-          return;
+        } else {
+          try {
+            dispatchUMIP({ type: 'inspection-loaded', inspection: await getUMIPInspection() });
+          } catch (reason) {
+            logger.error('Failed to inspect UMIP boot configuration', reason);
+            dispatchUMIP({ type: 'inspection-failed', error: readinessError(reason) });
+          }
         }
-        try {
-          dispatchUMIP({ type: 'inspection-loaded', inspection: await getUMIPInspection() });
-        } catch (reason) {
-          logger.error('Failed to inspect UMIP boot configuration', reason);
-          dispatchUMIP({ type: 'inspection-failed', error: readinessError(reason) });
+      }
+      if (checks.some((check) => check.id === 'emulation-module')) {
+        const visualModule = getReadinessWorkspaceModuleFixture();
+        if (fixture && visualModule) {
+          setModulePreflight(visualModule.preflight);
+        } else {
+          try {
+            const nextModulePreflight = await getModulePreflight();
+            setModulePreflight(nextModulePreflight);
+          } catch (reason) {
+            logger.error('Failed to inspect CPUID module requirements', reason);
+            dispatchModule({ type: 'preflight-failed', error: readinessError(reason) });
+          }
         }
       }
     } catch (reason) {
@@ -92,7 +115,8 @@ export function ReadinessWorkspace() {
         setMutationActive(job.state === 'running');
         dispatchProton({ type: 'job-updated', job });
         dispatchUMIP({ type: 'job-updated', job });
-        if ((job.kind === 'proton-install' || job.kind === 'umip-apply') && job.state !== 'running') {
+        dispatchModule({ type: 'job-updated', job });
+        if ((job.kind === 'proton-install' || job.kind === 'umip-apply' || job.kind === 'module-install') && job.state !== 'running') {
           void refresh();
         }
       }),
@@ -135,6 +159,14 @@ export function ReadinessWorkspace() {
         draft={umipDraft}
         mutationActive={mutationActive}
         onDraft={dispatchUMIP}
+      />
+    ) : check.id === 'emulation-module' && !check.ok && status.modules.controllerState === 'idle' ? (
+      <ModuleSetup
+        check={check}
+        draft={moduleDraft}
+        preflight={modulePreflight}
+        mutationActive={mutationActive}
+        onDraft={dispatchModule}
       />
     ) : (
       <ReadinessDetail check={check} />

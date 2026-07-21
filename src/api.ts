@@ -9,6 +9,7 @@ import type {
   SystemStatus,
   UMIPBootloader,
   UMIPInspection,
+  ModulePreflight,
 } from "./types";
 
 export const BASE_URL = "http://127.0.0.1:42991/v1";
@@ -51,6 +52,15 @@ export const installProtonArchive = (
 
 export const getUMIPInspection = () =>
   fetcher.get<UMIPInspection>("/setup/umip");
+
+export const getModulePreflight = () =>
+  fetcher.get<ModulePreflight>("/setup/module/preflight");
+
+export const installModuleArchive = (path: string, capability: string) =>
+  fetcher.post<SetupJobSnapshot>("/setup/module/install", {
+    path,
+    capability,
+  });
 
 export const applyUMIPConfiguration = (
   bootloader: UMIPBootloader,

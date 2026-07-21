@@ -106,18 +106,29 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	})
 	umipInspector.Runner = host
 	service, err := New(Options{
-		ListenAddress: "127.0.0.1:42991", Config: store, Inspector: inspector, Manager: manager, Controller: controller,
+		Config: store, Inspector: inspector, Manager: manager, Controller: controller,
 		ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc"),
 		Proton: proton.NewInstaller(root), Jobs: jobs.NewCoordinator(),
 		UMIP:            umipInspector,
 		Capabilities:    capabilities,
 		ModuleInspector: cpuidmodule.NewInspector(),
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
+		ModuleInstaller: cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{}),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return service, root, store, controller
+}
+
+func TestNewRequiresModuleInstaller(t *testing.T) {
+	service, _, _, _ := newTestService(t)
+	options := service.options
+	options.ModuleInstaller = nil
+
+	if _, err := New(options); err == nil {
+		t.Fatal("New() accepted a missing module installer")
+	}
 }
 
 func testSetupSecret() []byte {
@@ -251,17 +262,6 @@ func TestConcurrentSessionCallsAreSerialized(t *testing.T) {
 	}
 	if len(controller.Sessions()) != 10 {
 		t.Fatalf("got %d sessions", len(controller.Sessions()))
-	}
-}
-
-func TestLoopbackBindingIsMandatory(t *testing.T) {
-	service, _, _, _ := newTestService(t)
-	options := service.options
-	for _, address := range []string{"0.0.0.0:42991", "[::1]:42991", "localhost:42991", ""} {
-		options.ListenAddress = address
-		if _, err := New(options); err == nil {
-			t.Fatalf("accepted %q", address)
-		}
 	}
 }
 

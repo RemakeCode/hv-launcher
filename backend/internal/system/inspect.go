@@ -19,8 +19,8 @@ type Inspector struct {
 	Paths  Paths
 }
 
-func NewInspector(userHome, runtimeDir string) *Inspector {
-	return &Inspector{Reader: OSReader{}, Runner: ExecRunner{}, Paths: DefaultPaths(userHome, runtimeDir)}
+func NewInspector(userHome string) *Inspector {
+	return &Inspector{Reader: OSReader{}, Runner: ExecRunner{}, Paths: DefaultPaths(userHome)}
 }
 
 func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.SystemStatus, error) {
@@ -156,11 +156,16 @@ func (i *Inspector) inspectModules(ctx context.Context, release, controllerState
 	status.KVMLoaded = moduleLoaded(i.Reader, i.Paths.ModulesRoot, "kvm")
 	status.KVMAMDLoaded = moduleLoaded(i.Reader, i.Paths.ModulesRoot, "kvm_amd")
 	status.KVMBusy = moduleRefCount(i.Reader, i.Paths.ModulesRoot, "kvm_amd") > 0
+	status.Lockdown = readLockdown(i.Reader, i.Paths.KernelLockdown)
 	if i.Runner != nil {
 		output, err := i.Runner.Run(ctx, "modinfo", "-F", "vermagic", "cpuid_fault_emulation")
 		if err == nil {
 			status.EmulationInstalled = true
 			status.EmulationCompatible = strings.HasPrefix(strings.TrimSpace(string(output)), release+" ") || strings.TrimSpace(string(output)) == release
+			if status.Lockdown == "integrity" || status.Lockdown == "confidentiality" {
+				signer, signerErr := i.Runner.Run(ctx, "modinfo", "-F", "signer", "cpuid_fault_emulation")
+				status.SigningRequired = signerErr != nil || strings.TrimSpace(string(signer)) == ""
+			}
 		}
 	}
 	return status
@@ -218,7 +223,8 @@ func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.Pat
 		checks = append(checks, model.Check{ID: "cpuid-fault", OK: nativeOK, Label: "Native CPUID faulting", Detail: boolDetail(nativeOK, "advertised by the running kernel", "not advertised by the running kernel"), Remedy: failedRemedy(nativeOK, "Use a kernel that exposes the cpuid_fault CPU flag.")})
 	}
 	if path == model.PathHypervisor {
-		checks = append(checks, model.Check{ID: "emulation-module", OK: modules.EmulationInstalled && modules.EmulationCompatible, Label: "CPUID module", Detail: moduleDetail(modules), Remedy: failedRemedy(modules.EmulationInstalled && modules.EmulationCompatible, "Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it.")})
+		moduleOK := modules.EmulationInstalled && modules.EmulationCompatible && !modules.SigningRequired
+		checks = append(checks, model.Check{ID: "emulation-module", OK: moduleOK, Label: "CPUID module", Detail: moduleDetail(modules), Remedy: failedRemedy(moduleOK, "Install cpuid_fault_emulation through DKMS for the running kernel, then complete any required module signing or MOK enrollment.")})
 	}
 	checks = append(checks, model.Check{ID: "proton", OK: proton.Found, Label: "Proton", Detail: protonDetail(proton), Remedy: failedRemedy(proton.Found, "Open Readiness details and setup to install a LinUwUx Proton archive.")})
 
@@ -360,10 +366,33 @@ func moduleDetail(status model.ModuleStatus) string {
 	if !status.EmulationCompatible {
 		return "installed module does not match the running kernel"
 	}
+	if status.SigningRequired {
+		return "installed, but module signing or MOK enrollment is required; check your distribution's documentation for instructions"
+	}
 	if status.EmulationLoaded {
 		return "installed, compatible, and loaded"
 	}
 	return "installed and compatible"
+}
+
+func readLockdown(reader Reader, path string) string {
+	if path == "" {
+		return "unknown"
+	}
+	data, err := reader.ReadFile(path)
+	if err != nil {
+		return "unknown"
+	}
+	for _, state := range []string{"none", "integrity", "confidentiality"} {
+		if strings.Contains(string(data), "["+state+"]") {
+			return state
+		}
+	}
+	value := strings.TrimSpace(string(data))
+	if value == "none" || value == "integrity" || value == "confidentiality" {
+		return value
+	}
+	return "unknown"
 }
 
 func protonDetail(status model.ProtonStatus) string {

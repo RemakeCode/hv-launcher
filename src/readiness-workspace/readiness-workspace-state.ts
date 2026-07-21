@@ -2,6 +2,7 @@ import type {
   Check,
   ProtonInstallResult,
   ProtonPreflightResponse,
+  ModuleInstallResult,
   SetupJobSnapshot,
   UMIPBootloader,
   UMIPInspection,
@@ -44,6 +45,18 @@ export interface UMIPDraft {
 
 export const emptyUMIPDraft: UMIPDraft = { stage: "loading" };
 
+export type ModuleFlowStage = "idle" | "selecting" | "review" | "installing" | "complete" | "failure";
+
+export interface ModuleDraft {
+  stage: ModuleFlowStage;
+  archivePath?: string;
+  job?: SetupJobSnapshot;
+  result?: ModuleInstallResult;
+  error?: string;
+}
+
+export const emptyModuleDraft: ModuleDraft = { stage: "idle" };
+
 const readinessWorkspaceCheckIds = new Set(["umip", "emulation-module", "proton"]);
 
 export type ProtonDraftAction =
@@ -62,6 +75,16 @@ export type UMIPDraftAction =
   | { type: "inspection-failed"; error: string }
   | { type: "bootloader-selected"; bootloader: UMIPBootloader }
   | { type: "apply-requested" }
+  | { type: "job-started"; job: SetupJobSnapshot }
+  | { type: "job-updated"; job: SetupJobSnapshot }
+  | { type: "failed"; error: string };
+
+export type ModuleDraftAction =
+  | { type: "selection-started" }
+  | { type: "selection-cancelled" }
+  | { type: "selection-ready"; path: string }
+  | { type: "preflight-failed"; error: string }
+  | { type: "install-requested" }
   | { type: "job-started"; job: SetupJobSnapshot }
   | { type: "job-updated"; job: SetupJobSnapshot }
   | { type: "failed"; error: string };
@@ -188,6 +211,44 @@ export function umipDraftReducer(state: UMIPDraft, action: UMIPDraftAction): UMI
       if (action.job.kind !== "umip-apply") return state;
       if (state.job && state.job.id !== action.job.id && state.job.state === "running") return state;
       return attachUMIPJob(state, action.job);
+    case "failed":
+      return { ...state, stage: "failure", error: action.error };
+  }
+}
+
+function attachModuleJob(state: ModuleDraft, job: SetupJobSnapshot): ModuleDraft {
+  if (job.state === "running") return { ...state, stage: "installing", job, error: undefined };
+  if (job.state === "succeeded") {
+    return {
+      ...state,
+      stage: "complete",
+      job,
+      result: job.result as ModuleInstallResult | undefined,
+      error: undefined,
+    };
+  }
+  return { ...state, stage: "failure", job, error: job.error ?? "CPUID module setup did not complete." };
+}
+
+export function moduleDraftReducer(state: ModuleDraft, action: ModuleDraftAction): ModuleDraft {
+  switch (action.type) {
+    case "selection-started":
+      return { ...state, stage: "selecting", error: undefined };
+    case "selection-cancelled":
+      return { ...state, stage: state.archivePath ? "review" : "idle" };
+    case "selection-ready":
+      return { ...state, stage: "review", archivePath: action.path, error: undefined };
+    case "preflight-failed":
+      return { ...state, error: action.error };
+    case "install-requested":
+      return { ...state, stage: "installing", job: undefined, error: undefined };
+    case "job-started":
+      if (state.job?.id === action.job.id && state.job.state !== "running") return state;
+      return attachModuleJob(state, action.job);
+    case "job-updated":
+      if (action.job.kind !== "module-install") return state;
+      if (state.job && state.job.id !== action.job.id && state.job.state === "running") return state;
+      return attachModuleJob(state, action.job);
     case "failed":
       return { ...state, stage: "failure", error: action.error };
   }

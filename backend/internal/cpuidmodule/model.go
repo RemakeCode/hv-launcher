@@ -59,24 +59,17 @@ type PreflightCheck struct {
 }
 
 type Preflight struct {
-	Ready            bool             `json:"ready"`
-	KernelRelease    string           `json:"kernelRelease"`
-	BuildRoot        string           `json:"buildRoot,omitempty"`
-	Toolchain        string           `json:"toolchain,omitempty"`
-	PackageManager   string           `json:"packageManager,omitempty"`
-	DistributionID   string           `json:"distributionId,omitempty"`
-	Lockdown         string           `json:"lockdown"`
-	Signing          SigningEvidence  `json:"signing"`
-	ControllerState  string           `json:"controllerState"`
-	DKMSRegistered   bool             `json:"dkmsRegistered"`
-	RegisteredSource string           `json:"registeredSource,omitempty"`
-	Checks           []PreflightCheck `json:"checks"`
-}
-
-type SigningEvidence struct {
-	ModuleSigningEnabled bool   `json:"moduleSigningEnabled"`
-	SignatureForced      bool   `json:"signatureForced"`
-	TrustedKeysSetting   string `json:"trustedKeysSetting,omitempty"`
+	Ready               bool             `json:"ready"`
+	KernelRelease       string           `json:"kernelRelease"`
+	BuildRoot           string           `json:"buildRoot,omitempty"`
+	Toolchain           string           `json:"toolchain,omitempty"`
+	PackageManager      string           `json:"packageManager,omitempty"`
+	DistributionID      string           `json:"distributionId,omitempty"`
+	Lockdown            string           `json:"lockdown"`
+	ControllerState     string           `json:"controllerState"`
+	DependencyPlan      *DependencyPlan  `json:"dependencyPlan,omitempty"`
+	DependencyPlanError string           `json:"dependencyPlanError,omitempty"`
+	Checks              []PreflightCheck `json:"checks"`
 }
 
 func DefaultLimits() Limits {
