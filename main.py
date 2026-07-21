@@ -15,7 +15,7 @@ import decky
 
 SETUP_SECRET_ENVIRONMENT = "HV_LAUNCHER_SETUP_SECRET"
 SETUP_CAPABILITY_OPERATIONS = frozenset(
-    {"umip-apply", "module-preflight", "module-install"}
+    {"umip-apply", "module-install"}
 )
 SETUP_CAPABILITY_SECONDS = 60
 MAX_SETUP_BINDING_BYTES = 4096

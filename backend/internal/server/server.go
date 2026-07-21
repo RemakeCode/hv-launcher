@@ -98,7 +98,7 @@ func (s *Service) routes() http.Handler {
 		api.Post("/setup/proton/install", s.installProtonArchive)
 		api.Get("/setup/umip", s.inspectUMIP)
 		api.Post("/setup/umip", s.applyUMIP)
-		api.Post("/setup/module/preflight", s.preflightModuleArchive)
+		api.Get("/setup/module/preflight", s.inspectModuleRequirements)
 		api.Get("/setup/jobs/active", s.activeSetupJob)
 		api.Get("/setup/jobs/{jobID}", s.setupJob)
 		api.Get("/setup/events", s.setupEvents)

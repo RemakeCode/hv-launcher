@@ -2,7 +2,6 @@ import { callable } from "@decky/api";
 
 export type PrivilegedSetupOperation =
   | "umip-apply"
-  | "module-preflight"
   | "module-install";
 
 const requestSetupCapability = callable<[PrivilegedSetupOperation, string], string>(
