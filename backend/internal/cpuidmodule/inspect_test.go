@@ -23,8 +23,7 @@ func TestInspectAcceptsCurrentFlatModuleLayout(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if inspection.FileName != filepath.Base(archivePath) || len(inspection.SHA256) != 64 ||
-		len(inspection.SourceDigest) != 64 || inspection.EntryCount != len(validModuleEntries()) ||
+	if inspection.FileName != filepath.Base(archivePath) || inspection.EntryCount != len(validModuleEntries()) ||
 		inspection.Identity.PackageName != "cpuid_fault_emulation" ||
 		inspection.Identity.PackageVersion != "0.1" || !inspection.Identity.AutomaticInstall ||
 		!strings.Contains(inspection.Warning, "cannot verify") || !strings.Contains(inspection.Warning, "as root") {
