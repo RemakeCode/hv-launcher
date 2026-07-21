@@ -109,8 +109,7 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	service, err := New(Options{
 		ListenAddress: "127.0.0.1:42991", Config: store, Inspector: inspector, Manager: manager, Controller: controller,
 		ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc"),
-		Proton:           proton.NewInstaller(root),
-		ProtonSelections: proton.NewSelectionStore(), Jobs: jobs.NewCoordinator(),
+		Proton: proton.NewInstaller(root), Jobs: jobs.NewCoordinator(),
 		UMIP:            umipInspector,
 		Capabilities:    capabilities,
 		ModuleInspector: cpuidmodule.NewInspector(),

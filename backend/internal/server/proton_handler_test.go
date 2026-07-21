@@ -44,11 +44,11 @@ func TestProtonInspectAndInstallAPI(t *testing.T) {
 	if err := json.Unmarshal(inspectionResponse.Body.Bytes(), &inspected); err != nil {
 		t.Fatal(err)
 	}
-	if inspected.SelectionID == "" || inspected.Preflight.CompressedBytes <= 0 || len(inspected.Preflight.Destinations) != 1 || inspected.Responsibility == "" {
+	if inspected.Preflight.CompressedBytes <= 0 || len(inspected.Preflight.Destinations) != 1 || inspected.Responsibility == "" {
 		t.Fatalf("unexpected preflight: %+v", inspected)
 	}
 	destinationID := inspected.Preflight.Destinations[0].ID
-	installResponse := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"selectionId":`+jsonString(inspected.SelectionID)+`,"destinationId":`+jsonString(destinationID)+`,"confirmedSource":true}`)
+	installResponse := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"path":`+jsonString(archivePath)+`,"destinationId":`+jsonString(destinationID)+`,"confirmedSource":true}`)
 	if installResponse.Code != http.StatusAccepted {
 		t.Fatalf("install returned %d: %s", installResponse.Code, installResponse.Body.String())
 	}
@@ -70,27 +70,28 @@ func TestProtonInspectAndInstallAPI(t *testing.T) {
 	}
 }
 
-func TestProtonInstallRejectsUnknownSelectionUnconfirmedSourceAndUnofferedDestination(t *testing.T) {
+func TestProtonInstallRejectsInvalidInputUnconfirmedSourceAndUnknownDestination(t *testing.T) {
 	service, _, _, _ := newTestService(t)
-	unknown := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"selectionId":"unknown","destinationId":"native","confirmedSource":true}`)
-	if unknown.Code != http.StatusGone {
-		t.Fatalf("unknown inspection returned %d: %s", unknown.Code, unknown.Body.String())
+	invalidPath := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"path":"relative.tar.xz","destinationId":"native","confirmedSource":true}`)
+	if invalidPath.Code != http.StatusBadRequest {
+		t.Fatalf("relative path returned %d: %s", invalidPath.Code, invalidPath.Body.String())
 	}
 
 	archivePath := writeServerProtonArchive(t)
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/preflight", `{"path":`+jsonString(archivePath)+`}`)
-	var inspected protonPreflightResponse
-	if err := json.Unmarshal(response.Body.Bytes(), &inspected); err != nil {
-		t.Fatal(err)
-	}
-	unconfirmed := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"selectionId":`+jsonString(inspected.SelectionID)+`,"destinationId":"native","confirmedSource":false}`)
+	unconfirmed := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"path":`+jsonString(archivePath)+`,"destinationId":"native","confirmedSource":false}`)
 	if unconfirmed.Code != http.StatusBadRequest {
 		t.Fatalf("unconfirmed source returned %d: %s", unconfirmed.Code, unconfirmed.Body.String())
 	}
-	badDestinationID := "unknown"
-	invalid := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"selectionId":`+jsonString(inspected.SelectionID)+`,"destinationId":`+jsonString(badDestinationID)+`,"confirmedSource":true}`)
-	if invalid.Code != http.StatusBadRequest {
-		t.Fatalf("unreviewed destination returned %d: %s", invalid.Code, invalid.Body.String())
+	invalid := perform(service.Handler(), http.MethodPost, "/v1/setup/proton/install", `{"path":`+jsonString(archivePath)+`,"destinationId":"unknown","confirmedSource":true}`)
+	if invalid.Code != http.StatusAccepted {
+		t.Fatalf("unknown destination did not start a rejecting job: %d: %s", invalid.Code, invalid.Body.String())
+	}
+	var started jobs.JobSnapshot
+	if err := json.Unmarshal(invalid.Body.Bytes(), &started); err != nil {
+		t.Fatal(err)
+	}
+	if terminal := waitForServerJob(t, service, started.ID); terminal.State != jobs.JobFailed {
+		t.Fatalf("unknown destination was not rejected: %+v", terminal)
 	}
 }
 

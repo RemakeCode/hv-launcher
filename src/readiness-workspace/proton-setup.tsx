@@ -73,10 +73,10 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
     const startInstall = async () => {
         const selection = draft.selection;
         const destinationId = draft.destinationId;
-        if (!selection || !destinationId) return;
+        if (!selection || !draft.archivePath || !destinationId) return;
         onDraft({ type: 'install-requested' });
         try {
-            const job = await installProtonArchive(selection.selectionId, destinationId);
+            const job = await installProtonArchive(draft.archivePath, destinationId);
             const latest = setupEventStore.current('proton-install');
             onDraft({ type: 'job-started', job: latest?.id === job.id ? latest : job });
         } catch (reason) {
@@ -191,7 +191,6 @@ function ProtonSelection({ draft, onDraft }: Pick<ProtonSetupProps, 'draft' | 'o
                     state: 'success'
                 }}
             />
-            <Field label='Selection expires' description={new Date(selection.expiresAt).toLocaleTimeString()} />
             {preflight.destinations.length > 1 ? (
                 <>
                     <Field

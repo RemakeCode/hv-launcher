@@ -4,7 +4,7 @@ import type {
   ManageResponse,
   RestoreResponse,
   ActiveSetupJob,
-  ProtonSelectionResponse,
+  ProtonPreflightResponse,
   SetupJobSnapshot,
   SystemStatus,
   UMIPBootloader,
@@ -38,13 +38,13 @@ export const postLifetime = (appId: string, instanceId: number, running: boolean
   });
 
 export const preflightProtonArchive = (path: string) =>
-  fetcher.post<ProtonSelectionResponse>("/setup/proton/preflight", { path });
+  fetcher.post<ProtonPreflightResponse>("/setup/proton/preflight", { path });
 
 export const installProtonArchive = (
-  selectionId: string,
+  path: string,
   destinationId: string,
 ) => fetcher.post<SetupJobSnapshot>("/setup/proton/install", {
-  selectionId,
+  path,
   destinationId,
   confirmedSource: true,
 });

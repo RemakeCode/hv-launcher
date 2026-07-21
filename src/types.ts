@@ -100,9 +100,7 @@ export interface ProtonArchivePreflight {
   destinations: ProtonDestination[];
 }
 
-export interface ProtonSelectionResponse {
-  selectionId: string;
-  expiresAt: string;
+export interface ProtonPreflightResponse {
   preflight: ProtonArchivePreflight;
   responsibility: string;
 }
