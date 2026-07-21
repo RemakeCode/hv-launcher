@@ -1,7 +1,7 @@
 import type {
   Check,
   ProtonInstallResult,
-  ProtonSelectionResponse,
+  ProtonPreflightResponse,
   SetupJobSnapshot,
   UMIPBootloader,
   UMIPInspection,
@@ -18,7 +18,7 @@ export type ProtonFlowStage =
 export interface ProtonDraft {
   stage: ProtonFlowStage;
   archivePath?: string;
-  selection?: ProtonSelectionResponse;
+  selection?: ProtonPreflightResponse;
   destinationId?: string;
   job?: SetupJobSnapshot;
   lastInstall?: ProtonInstallResult;
@@ -49,7 +49,7 @@ const readinessWorkspaceCheckIds = new Set(["umip", "emulation-module", "proton"
 export type ProtonDraftAction =
   | { type: "selection-started" }
   | { type: "selection-cancelled"; previous: ProtonDraft }
-  | { type: "selection-ready"; path: string; selection: ProtonSelectionResponse }
+  | { type: "selection-ready"; path: string; selection: ProtonPreflightResponse }
   | { type: "destination-selected"; destinationId: string }
   | { type: "install-requested" }
   | { type: "job-started"; job: SetupJobSnapshot }

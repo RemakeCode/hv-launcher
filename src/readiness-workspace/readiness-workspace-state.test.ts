@@ -13,14 +13,12 @@ import {
   umipDraftReducer,
 } from "./readiness-workspace-state";
 import type {
-  ProtonSelectionResponse,
+  ProtonPreflightResponse,
   SetupJobSnapshot,
   UMIPInspection,
 } from "../types";
 
-const selection: ProtonSelectionResponse = {
-  selectionId: "selection",
-  expiresAt: "2026-07-18T12:00:00Z",
+const selection: ProtonPreflightResponse = {
   responsibility: "Confirm the source",
   preflight: {
     fileName: "GE-Proton-LinUwUx.tar.xz",

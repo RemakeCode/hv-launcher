@@ -4,7 +4,7 @@ import type {
   Check,
   Configuration,
   ProtonInstallResult,
-  ProtonSelectionResponse,
+  ProtonPreflightResponse,
   SetupJobSnapshot,
   SystemStatus,
   UMIPCandidate,
@@ -326,9 +326,7 @@ export function getQAMVisualFixture(name: VisualFixtureName = selectedFixture): 
   return fixtures[name as QAMFixtureName];
 }
 
-const protonSelection: ProtonSelectionResponse = {
-  selectionId: 'X3m5Qn8VisualSelection',
-  expiresAt: '2026-07-18T12:10:00Z',
+const protonSelection: ProtonPreflightResponse = {
   responsibility: "HV Launcher cannot verify this archive's publisher, authenticity, or suitability. Confirm that you sourced and selected the intended archive before installing.",
   preflight: {
     fileName: 'cachyos-11.0-LinUwUx.tar.xz',

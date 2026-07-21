@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 	"path/filepath"
-	"time"
 
 	"hv-launcher/internal/jobs"
 	"hv-launcher/internal/proton"
@@ -18,14 +17,12 @@ type protonPreflightRequest struct {
 }
 
 type protonPreflightResponse struct {
-	SelectionID    string           `json:"selectionId"`
-	ExpiresAt      time.Time        `json:"expiresAt"`
 	Preflight      proton.Preflight `json:"preflight"`
 	Responsibility string           `json:"responsibility"`
 }
 
 type protonInstallRequest struct {
-	SelectionID     string `json:"selectionId"`
+	Path            string `json:"path"`
 	DestinationID   string `json:"destinationId"`
 	ConfirmedSource bool   `json:"confirmedSource"`
 }
@@ -45,15 +42,8 @@ func (s *Service) preflightProtonArchive(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusUnprocessableEntity, err)
 		return
 	}
-	record, err := s.options.ProtonSelections.Put(request.Path, preflight)
-	if err != nil {
-		writeError(w, http.StatusServiceUnavailable, err)
-		return
-	}
-	s.options.Logger.Info("Proton archive preflight complete", "path", request.Path, "selection_id", record.ID)
+	s.options.Logger.Info("Proton archive preflight complete", "path", request.Path)
 	writeJSON(w, http.StatusOK, protonPreflightResponse{
-		SelectionID:    record.ID,
-		ExpiresAt:      record.ExpiresAt,
 		Preflight:      preflight,
 		Responsibility: "HV Launcher cannot verify this archive's publisher, authenticity, or suitability. Confirm that you sourced and selected the intended archive before installing.",
 	})
@@ -64,33 +54,24 @@ func (s *Service) installProtonArchive(w http.ResponseWriter, r *http.Request) {
 	if !decodeStrict(w, r, &request) {
 		return
 	}
-	if request.SelectionID == "" || len(request.SelectionID) > 128 || request.DestinationID == "" || len(request.DestinationID) > 128 {
-		writeError(w, http.StatusBadRequest, errors.New("selection ID and destination ID are required"))
+	if request.Path == "" || len(request.Path) > maxSetupPathBytes || !filepath.IsAbs(request.Path) ||
+		request.DestinationID == "" || len(request.DestinationID) > 128 {
+		writeError(w, http.StatusBadRequest, errors.New("an absolute bounded archive path and destination ID are required"))
 		return
 	}
 	if !request.ConfirmedSource {
 		writeError(w, http.StatusBadRequest, errors.New("confirm that you sourced and selected the intended Proton archive"))
 		return
 	}
-	record, err := s.options.ProtonSelections.Get(request.SelectionID)
-	if err != nil {
-		writeError(w, http.StatusGone, err)
-		return
-	}
-	if !preflightContainsDestination(record.Preflight, request.DestinationID) {
-		writeError(w, http.StatusBadRequest, errors.New("destination was not offered for this selection"))
-		return
-	}
 	started, err := s.options.Jobs.Start("proton-install", "starting", func(job *jobs.Job) (any, error) {
-		result, installErr := s.options.Proton.Install(context.Background(), record.Path, request.DestinationID, func(phase string, progress int, message string) {
+		result, installErr := s.options.Proton.Install(context.Background(), request.Path, request.DestinationID, func(phase string, progress int, message string) {
 			job.Update(phase, progress)
 			job.Output(message)
 		})
 		if installErr != nil {
-			s.options.Logger.Error("Proton installation failed", "selection_id", record.ID, "error", installErr)
+			s.options.Logger.Error("Proton installation failed", "path", request.Path, "error", installErr)
 			return nil, installErr
 		}
-		s.options.ProtonSelections.Delete(record.ID)
 		job.Output("Compatibility tool installed. Steam must be restarted before selecting it.")
 		s.options.Logger.Info("Proton installation complete", "tool", result.ToolName, "destination_id", result.DestinationID)
 		return result, nil
@@ -104,13 +85,4 @@ func (s *Service) installProtonArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusAccepted, started)
-}
-
-func preflightContainsDestination(preflight proton.Preflight, requestedID string) bool {
-	for _, destination := range preflight.Destinations {
-		if destination.ID == requestedID {
-			return true
-		}
-	}
-	return false
 }

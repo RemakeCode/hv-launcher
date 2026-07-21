@@ -36,8 +36,6 @@ describe("Proton setup API", () => {
 
   it("sends the selected path to the fixed preflight endpoint", async () => {
     const response = {
-      selectionId: "selection-1",
-      expiresAt: "2026-07-19T12:01:00Z",
       responsibility: "Confirm that you selected the intended archive.",
       preflight: {
         fileName: "GE-Proton11-1-LinUwUx.tar.xz",
@@ -64,7 +62,7 @@ describe("Proton setup API", () => {
     );
   });
 
-  it("binds installation to the selected record and destination with source confirmation", async () => {
+  it("sends the selected path and destination with source confirmation", async () => {
     const response = {
       id: "job-1",
       kind: "proton-install",
@@ -76,14 +74,15 @@ describe("Proton setup API", () => {
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(response)));
 
-    await expect(installProtonArchive("selection-1", "native")).resolves.toEqual(response);
+    const path = "/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz";
+    await expect(installProtonArchive(path, "native")).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith(
       `${BASE_URL}/setup/proton/install`,
       {
         method: "POST",
         body: JSON.stringify({
-          selectionId: "selection-1",
+          path,
           destinationId: "native",
           confirmedSource: true,
         }),
@@ -94,15 +93,15 @@ describe("Proton setup API", () => {
 
   it("preserves a Proton installation failure from the backend", async () => {
     fetchMock.mockResolvedValue(
-      new Response('{"error":"The selected archive has expired; choose it again."}', {
-        status: 410,
+      new Response('{"error":"open selected archive: file not found"}', {
+        status: 422,
       }),
     );
 
-    await expect(installProtonArchive("expired", "native")).rejects.toEqual(
+    await expect(installProtonArchive("/home/deck/missing.tar.xz", "native")).rejects.toEqual(
       new BackendRequestError(
-        "The selected archive has expired; choose it again.",
-        410,
+        "open selected archive: file not found",
+        422,
       ),
     );
   });
