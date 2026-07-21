@@ -99,17 +99,6 @@ func TestUMIPInspectionEndpointReportsChoiceAndManualOnlySystems(t *testing.T) {
 		}
 	})
 
-	t.Run("systemd boot remains manual only", func(t *testing.T) {
-		service, _, _, _ := newTestService(t)
-		if err := os.MkdirAll(service.options.UMIP.Paths.SystemdEntries, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		result := inspectUMIPEndpoint(t, service)
-		if result.Selection != umip.SelectionManualOnly || len(result.Manual) != 1 ||
-			!strings.Contains(result.Manual[0].Detail, "systemd-boot") {
-			t.Fatalf("unexpected systemd-boot inspection: %+v", result)
-		}
-	})
 }
 
 func inspectUMIPEndpoint(t *testing.T, service *Service) umip.Inspection {

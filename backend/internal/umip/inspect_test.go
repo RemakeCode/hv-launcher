@@ -186,18 +186,6 @@ func TestInspectSelectionAndManualOnlyOutcomes(t *testing.T) {
 		}
 	})
 
-	t.Run("systemd boot remains manual only", func(t *testing.T) {
-		paths := testPaths(t)
-		if err := os.MkdirAll(paths.SystemdEntries, 0o755); err != nil {
-			t.Fatal(err)
-		}
-
-		result := NewInspector(paths).Inspect(true)
-		manual := onlyManual(t, result)
-		if result.Selection != SelectionManualOnly || manual.Reason != ReasonUnsupportedLoader || !strings.Contains(manual.Detail, "systemd-boot") {
-			t.Fatalf("unexpected systemd-boot outcome: %+v", result)
-		}
-	})
 }
 
 func TestInspectAcceptsSystemManagedSymlinksAndPermissions(t *testing.T) {
@@ -248,7 +236,6 @@ func testPaths(t *testing.T) Paths {
 		LimineConfiguration: filepath.Join(root, "etc", "default", "limine"),
 		GRUBConfiguration:   filepath.Join(root, "etc", "default", "grub"),
 		GRUBOutput:          filepath.Join(root, "boot", "grub", "grub.cfg"),
-		SystemdEntries:      filepath.Join(root, "boot", "loader", "entries"),
 		LimineUpdaters:      []string{filepath.Join(root, "usr", "bin", "limine-update")},
 		UpdateGRUB:          []string{filepath.Join(root, "usr", "sbin", "update-grub")},
 		GRUBMkconfig:        []string{filepath.Join(root, "usr", "bin", "grub-mkconfig")},

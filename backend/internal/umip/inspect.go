@@ -15,7 +15,6 @@ type Paths struct {
 	LimineConfiguration string
 	GRUBConfiguration   string
 	GRUBOutput          string
-	SystemdEntries      string
 	LimineUpdaters      []string
 	UpdateGRUB          []string
 	GRUBMkconfig        []string
@@ -36,7 +35,6 @@ func DefaultPaths() Paths {
 		LimineConfiguration: "/etc/default/limine",
 		GRUBConfiguration:   "/etc/default/grub",
 		GRUBOutput:          "/boot/grub/grub.cfg",
-		SystemdEntries:      "/boot/loader/entries",
 		LimineUpdaters:      []string{"/usr/bin/limine-update", "/usr/local/bin/limine-update"},
 		UpdateGRUB:          []string{"/usr/sbin/update-grub", "/usr/bin/update-grub"},
 		GRUBMkconfig:        []string{"/usr/bin/grub-mkconfig", "/usr/sbin/grub-mkconfig"},
@@ -56,12 +54,6 @@ func (i *Inspector) Inspect(liveUMIP bool) Inspection {
 	}
 	i.inspectLimine(&result)
 	i.inspectGRUB(&result)
-	if len(result.Candidates) == 0 && len(result.Manual) == 0 && directoryExists(i.Paths.SystemdEntries) {
-		result.Manual = append(result.Manual, ManualOutcome{
-			Reason: ReasonUnsupportedLoader,
-			Detail: "systemd-boot is not supported; add clearcpuid=514 manually.",
-		})
-	}
 	if len(result.Candidates) == 0 && len(result.Manual) == 0 {
 		result.Manual = append(result.Manual, ManualOutcome{
 			Reason: ReasonUnsupportedLoader,
@@ -210,14 +202,14 @@ func manual(bootloader Bootloader, reason ManualReason, err error) ManualOutcome
 }
 
 func readConfiguration(path string) ([]byte, bool, error) {
-	snapshot, err := readConfigurationSnapshot(path)
+	data, err := readConfigurationData(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, false, nil
 	}
 	if err != nil {
 		return nil, true, err
 	}
-	return snapshot.data, true, nil
+	return data, true, nil
 }
 
 func firstExecutable(paths []string) string {
@@ -232,9 +224,4 @@ func firstExecutable(paths []string) string {
 func regularFile(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && info.Mode().IsRegular()
-}
-
-func directoryExists(path string) bool {
-	info, err := os.Stat(path)
-	return err == nil && info.IsDir()
 }
