@@ -37,7 +37,7 @@ func TestManagedLaunchValuePreservesLaunchForms(t *testing.T) {
 }
 
 func TestManagedLaunchValueRejectsNestedWrapper(t *testing.T) {
-	_, err := ManagedLaunchValue("/x/hv-launcher-wrapper run -- %command%", "/wrapper", "42")
+	_, err := ManagedLaunchValue("/plugin/bin/hv-launcher run --app-id 42 -- %command%", "/wrapper", "42")
 	if !errors.Is(err, ErrAlreadyManaged) {
 		t.Fatalf("got %v", err)
 	}
@@ -51,7 +51,7 @@ func TestLauncherCommandFixturesRemainInsideWrapper(t *testing.T) {
 		`run net.lutris.Lutris lutris:rungameid/42`,
 	}
 	for _, original := range fixtures {
-		managed, err := ManagedLaunchValue(original, "/persistent/hv-launcher-wrapper", "2147483714")
+		managed, err := ManagedLaunchValue(original, "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher", "2147483714")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestManagerRestoresExactValueAndReportsConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	manager := &Manager{Store: store, WrapperPath: "/persistent/hv-launcher-wrapper"}
+	manager := &Manager{Store: store, WrapperPath: "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher"}
 	game, err := manager.Enable("42", "Heroic", true, `FOO=1 %command% "arg"`)
 	if err != nil {
 		t.Fatal(err)

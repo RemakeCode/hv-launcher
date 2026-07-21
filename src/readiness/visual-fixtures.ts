@@ -43,8 +43,8 @@ const managedConfiguration: Configuration = {
       name: 'Visual fixture shortcut',
       shortcut: true,
       originalLaunch: 'run-game',
-      managedLaunch: 'hv-launcher-wrapper -- run-game',
-      wrapperPath: '/tmp/hv-launcher-wrapper'
+      managedLaunch: '/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher run --app-id 42 -- %command%',
+      wrapperPath: '/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher'
     }
   }
 };
