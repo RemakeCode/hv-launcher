@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -39,11 +40,11 @@ type fixtureEntry struct {
 	data     []byte
 }
 
-func TestInspectValidGzipAndXZFixtures(t *testing.T) {
+func TestArchiveValidationAcceptsGzipAndXZFixtures(t *testing.T) {
 	for _, compression := range []Compression{CompressionGzip, CompressionXZ} {
 		t.Run(string(compression), func(t *testing.T) {
 			archive := buildArchive(t, compression, validFixture(fixtureRoot))
-			inspection, err := Inspect(bytes.NewReader(archive))
+			inspection, err := validateFixtureArchive(t, archive, DefaultLimits())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -79,7 +80,7 @@ func TestInspectValidGzipAndXZFixtures(t *testing.T) {
 	}
 }
 
-func TestInspectAcceptsRecognizedPayloadVariants(t *testing.T) {
+func TestArchiveValidationAcceptsRecognizedPayloadVariants(t *testing.T) {
 	tests := []struct {
 		name    string
 		entries []fixtureEntry
@@ -110,7 +111,7 @@ func TestInspectAcceptsRecognizedPayloadVariants(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			inspection, err := Inspect(bytes.NewReader(buildArchive(t, CompressionGzip, test.entries)))
+			inspection, err := validateFixtureArchive(t, buildArchive(t, CompressionGzip, test.entries), DefaultLimits())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -121,7 +122,7 @@ func TestInspectAcceptsRecognizedPayloadVariants(t *testing.T) {
 	}
 }
 
-func TestInspectAcceptsMinimalCompatibilityManifest(t *testing.T) {
+func TestArchiveValidationAcceptsMinimalCompatibilityManifest(t *testing.T) {
 	entries := replaceEntry(validFixture(fixtureRoot), fixtureEntry{
 		name:     fixtureRoot + "/compatibilitytool.vdf",
 		typeFlag: tar.TypeReg,
@@ -137,7 +138,7 @@ func TestInspectAcceptsMinimalCompatibilityManifest(t *testing.T) {
 `),
 	})
 
-	inspection, err := Inspect(bytes.NewReader(buildArchive(t, CompressionGzip, entries)))
+	inspection, err := validateFixtureArchive(t, buildArchive(t, CompressionGzip, entries), DefaultLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +147,7 @@ func TestInspectAcceptsMinimalCompatibilityManifest(t *testing.T) {
 	}
 }
 
-func TestInspectAcceptsSafeDanglingSymlink(t *testing.T) {
+func TestArchiveValidationAcceptsSafeDanglingSymlink(t *testing.T) {
 	entries := append(validFixture(fixtureRoot), fixtureEntry{
 		name:     fixtureRoot + "/files/bin/future-link",
 		typeFlag: tar.TypeSymlink,
@@ -154,7 +155,7 @@ func TestInspectAcceptsSafeDanglingSymlink(t *testing.T) {
 		linkName: "not-created-yet",
 	})
 
-	inspection, err := Inspect(bytes.NewReader(buildArchive(t, CompressionXZ, entries)))
+	inspection, err := validateFixtureArchive(t, buildArchive(t, CompressionXZ, entries), DefaultLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,7 +164,7 @@ func TestInspectAcceptsSafeDanglingSymlink(t *testing.T) {
 	}
 }
 
-func TestInspectRejectsUnsafeOrIncompleteFixtures(t *testing.T) {
+func TestArchiveValidationRejectsUnsafeOrIncompleteFixtures(t *testing.T) {
 	tests := []struct {
 		name    string
 		entries []fixtureEntry
@@ -279,14 +280,14 @@ func TestInspectRejectsUnsafeOrIncompleteFixtures(t *testing.T) {
 	for _, compression := range []Compression{CompressionGzip, CompressionXZ} {
 		for _, test := range tests {
 			t.Run(string(compression)+"/"+test.name, func(t *testing.T) {
-				_, err := Inspect(bytes.NewReader(buildArchive(t, compression, test.entries)))
+				_, err := validateFixtureArchive(t, buildArchive(t, compression, test.entries), DefaultLimits())
 				assertValidationError(t, err, test.code, "")
 			})
 		}
 	}
 }
 
-func TestInspectEnforcesEveryResourceLimit(t *testing.T) {
+func TestArchiveValidationEnforcesEveryResourceLimit(t *testing.T) {
 	archive := buildArchive(t, CompressionGzip, validFixture(fixtureRoot))
 	tests := []struct {
 		name   string
@@ -332,25 +333,36 @@ func TestInspectEnforcesEveryResourceLimit(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			_, err := InspectWithLimits(bytes.NewReader(archive), test.limits)
+			_, err := validateFixtureArchive(t, archive, test.limits)
 			assertValidationError(t, err, ErrorResourceLimit, test.limit)
 		})
 	}
 }
 
-func TestInspectRejectsUnsupportedAndMalformedCompression(t *testing.T) {
-	_, err := Inspect(bytes.NewReader([]byte("not an archive")))
+func TestArchiveValidationRejectsUnsupportedAndMalformedCompression(t *testing.T) {
+	_, err := validateFixtureArchive(t, []byte("not an archive"), DefaultLimits())
 	assertValidationError(t, err, ErrorUnsupportedFormat, "")
 
 	truncated := buildArchive(t, CompressionXZ, validFixture(fixtureRoot))
 	truncated = truncated[:len(truncated)-8]
-	_, err = Inspect(bytes.NewReader(truncated))
+	_, err = validateFixtureArchive(t, truncated, DefaultLimits())
 	assertValidationError(t, err, ErrorMalformedArchive, "")
 }
 
-func TestInspectRejectsInvalidLimits(t *testing.T) {
-	_, err := InspectWithLimits(bytes.NewReader([]byte("unused")), Limits{})
+func TestArchiveValidationRejectsInvalidLimits(t *testing.T) {
+	_, err := validateFixtureArchive(t, []byte("unused"), Limits{})
 	assertValidationError(t, err, ErrorInvalidLimits, "")
+}
+
+func validateFixtureArchive(t *testing.T, archive []byte, limits Limits) (Inspection, error) {
+	t.Helper()
+	if err := validateLimits(limits); err != nil {
+		return Inspection{}, err
+	}
+	if int64(len(archive)) > limits.MaxCompressedBytes {
+		return Inspection{}, limitError("compressed-bytes", "archive exceeds the compressed-size limit")
+	}
+	return extractArchive(context.Background(), bytes.NewReader(archive), t.TempDir(), limits)
 }
 
 func requiredFixture(root string) []fixtureEntry {

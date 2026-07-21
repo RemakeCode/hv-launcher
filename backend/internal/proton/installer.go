@@ -320,6 +320,9 @@ func extractArchive(ctx context.Context, archive io.Reader, staging string, limi
 			}
 			_, copyErr := io.CopyN(writer, tarReader, header.Size)
 			closeErr := file.Close()
+			if copyErr != nil && limited.N == 0 {
+				return Inspection{}, limitError("expanded-bytes", fmt.Sprintf("archive expands beyond %d bytes", limits.MaxExpandedBytes))
+			}
 			if copyErr != nil || closeErr != nil {
 				return Inspection{}, fmt.Errorf("write regular file %q: %w", name, errors.Join(copyErr, closeErr))
 			}
