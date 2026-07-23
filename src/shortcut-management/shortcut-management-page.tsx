@@ -84,13 +84,11 @@ export function ShortcutManagementPage() {
         setBusy(game.appId);
         setError('');
         try {
-            let conflict: string | undefined;
             if (enabled) await enableManagedGame(game);
-            else conflict = await disableManagedGame(game);
+            else await disableManagedGame(game);
             await refresh();
-            if (conflict) setError(`${game.name}: ${conflict}`);
         } catch (reason) {
-            logger.error(`Failed to ${enabled ? 'enable' : 'restore'} ${game.name}`, reason);
+            logger.error(`Failed to ${enabled ? 'enable' : 'disable'} ${game.name}`, reason);
             setError(shortcutActionError(game, enabled, reason));
         } finally {
             setBusy(undefined);
@@ -121,7 +119,7 @@ export function ShortcutManagementPage() {
                             {status && status.status !== 'hypervisor-ready' && (
                                 <DialogLabel>
                                     New shortcuts cannot be enabled in the current host state. Managed shortcuts can
-                                    still be restored.
+                                    still be disabled.
                                 </DialogLabel>
                             )}
                             {libraryMessage && <DialogLabel style={{ marginBottom: 16 }}>{libraryMessage}</DialogLabel>}

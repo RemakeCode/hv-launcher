@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  disableManagedGame,
   discoverGames,
   observeSteamLifetime,
   observeSteamOverviews,
@@ -9,6 +10,19 @@ import {
   type SteamBridge,
 } from "./steam";
 import type { Configuration } from "./types";
+
+const api = vi.hoisted(() => ({
+  disableGame: vi.fn(),
+  enableGame: vi.fn(),
+  getConfiguration: vi.fn(),
+  postLifetime: vi.fn(),
+}));
+
+vi.mock("./api", () => api);
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 function bridgeWithoutOverview() {
   let lifetime: ((notification: { unAppID: number; nInstanceID: number; bRunning: boolean }) => void) | undefined;
@@ -158,7 +172,7 @@ describe("allApps discovery", () => {
     expect(games.map((game) => game.appId)).toEqual(["2650715882", "42", "10"]);
     expect(games.find((game) => game.appId === "2650715882")?.shortcut).toBe(true);
     expect(games.find((game) => game.appId === "10")?.running).toBe(true);
-    expect(games.find((game) => game.appId === "42")?.conflict).toContain("no longer present");
+    expect(games.find((game) => game.appId === "42")?.missing).toBe(true);
   });
 
   it("reports loading without another discovery fallback", () => {
@@ -231,5 +245,51 @@ describe("launch option reading", () => {
 
     expect(value).toBe("--original");
     expect(unregister).toHaveBeenCalledOnce();
+  });
+});
+
+describe("disabling shortcut management", () => {
+  const configuration: Configuration = {
+    version: 1,
+    games: {
+      "42": {
+        appId: "42",
+        name: "Heroic Game",
+        shortcut: true,
+        originalLaunch: "original",
+        managedLaunch: "managed",
+        wrapperPath: "/wrapper",
+      },
+    },
+  };
+
+  it("preserves a recreated shortcut value and removes management", async () => {
+    api.getConfiguration.mockResolvedValue(configuration);
+    api.disableGame.mockResolvedValue(undefined);
+    const fixture = bridgeWithoutOverview();
+
+    await disableManagedGame(
+      { appId: "42", name: "Heroic Game", shortcut: true, enabled: true, running: false },
+      fixture.bridge,
+      { GetAppDetails: () => ({ strShortcutLaunchOptions: "reinstalled game" }) },
+    );
+
+    expect(api.disableGame).toHaveBeenCalledWith("42");
+    expect(fixture.bridge.Apps.SetShortcutLaunchOptions).not.toHaveBeenCalled();
+  });
+
+  it("restores the original value while the managed wrapper is current", async () => {
+    api.getConfiguration.mockResolvedValue(configuration);
+    api.disableGame.mockResolvedValue(undefined);
+    const fixture = bridgeWithoutOverview();
+
+    await disableManagedGame(
+      { appId: "42", name: "Heroic Game", shortcut: true, enabled: true, running: false },
+      fixture.bridge,
+      { GetAppDetails: () => ({ strShortcutLaunchOptions: "managed" }) },
+    );
+
+    expect(fixture.bridge.Apps.SetShortcutLaunchOptions).toHaveBeenCalledWith(42, "original");
+    expect(api.disableGame).toHaveBeenCalledWith("42");
   });
 });

@@ -106,17 +106,6 @@ type ManageGameResponse struct {
 	WrapperPath   string `json:"wrapperPath"`
 }
 
-type RestoreResponse struct {
-	AppID          string `json:"appId"`
-	OriginalLaunch string `json:"originalLaunch,omitempty"`
-	Conflict       bool   `json:"conflict"`
-	Message        string `json:"message,omitempty"`
-}
-
-type RestoreRequest struct {
-	CurrentLaunch string `json:"currentLaunch"`
-}
-
 type SessionStartRequest struct {
 	AppID string `json:"appId"`
 }

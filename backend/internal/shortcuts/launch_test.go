@@ -61,7 +61,7 @@ func TestLauncherCommandFixturesRemainInsideWrapper(t *testing.T) {
 	}
 }
 
-func TestManagerRestoresExactValueAndReportsConflict(t *testing.T) {
+func TestManagerDisablesManagement(t *testing.T) {
 	store, err := config.Open(filepath.Join(t.TempDir(), "settings"))
 	if err != nil {
 		t.Fatal(err)
@@ -71,24 +71,13 @@ func TestManagerRestoresExactValueAndReportsConflict(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conflict, err := manager.Restore("42", game.ManagedLaunch+" user-edit")
-	if err != nil {
+	if game.ManagedLaunch == "" {
+		t.Fatal("managed launch value is empty")
+	}
+	if err := manager.Disable("42"); err != nil {
 		t.Fatal(err)
-	}
-	if !conflict.Conflict || !strings.Contains(conflict.Message, "changed") {
-		t.Fatalf("unexpected conflict: %+v", conflict)
-	}
-	if _, exists := store.Game("42"); !exists {
-		t.Fatal("conflicted record was removed")
-	}
-	restored, err := manager.Restore("42", game.ManagedLaunch)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if restored.Conflict || restored.OriginalLaunch != game.OriginalLaunch {
-		t.Fatalf("unexpected restore: %+v", restored)
 	}
 	if _, exists := store.Game("42"); exists {
-		t.Fatal("restored record remains")
+		t.Fatal("disabled management record remains")
 	}
 }

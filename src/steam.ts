@@ -102,7 +102,6 @@ export function discoverGames(
         enabled: true,
         running: false,
         missing: true,
-        conflict: "Managed entry is no longer present in Steam's allApps collection.",
       });
     }
   }
@@ -160,36 +159,36 @@ export async function enableManagedGame(game: Game, bridge: SteamBridge = SteamC
   try {
     setLaunchValue(game, managed.managedLaunch, bridge);
   } catch (error) {
-    await disableGame(game.appId, original);
+    await disableGame(game.appId);
     throw error;
   }
 }
 
-export async function disableManagedGame(game: Game, bridge: SteamBridge = SteamClient): Promise<string | undefined> {
+export async function disableManagedGame(
+  game: Game,
+  bridge: SteamBridge = SteamClient,
+  store: SteamDetailsStore | undefined = window.appDetailsStore,
+): Promise<void> {
   const config = await getConfiguration();
   const record = config.games[game.appId];
-  if (!record) return undefined;
+  if (!record) return;
   if (game.missing) {
-    const result = await disableGame(game.appId, record.managedLaunch);
-    return result.message;
+    await disableGame(game.appId);
+    return;
   }
-  const current = await readLaunchValue(game, bridge);
-  if (current !== record.managedLaunch && current !== record.originalLaunch) {
-    const result = await disableGame(game.appId, current);
-    return result.message ?? "Steam launch options were edited; your value was preserved.";
+  const current = await readLaunchValue(game, bridge, store);
+  if (current !== record.managedLaunch) {
+    await disableGame(game.appId);
+    return;
   }
+
   setLaunchValue(game, record.originalLaunch, bridge);
   try {
-    const result = await disableGame(game.appId, record.managedLaunch);
-    if (result.conflict) {
-      setLaunchValue(game, current, bridge);
-      return result.message;
-    }
+    await disableGame(game.appId);
   } catch (error) {
     setLaunchValue(game, record.managedLaunch, bridge);
     throw error;
   }
-  return undefined;
 }
 
 export function displayState(appId: string): "idle" | "launching" | "running" | "stopping" {

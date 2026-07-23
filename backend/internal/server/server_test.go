@@ -204,22 +204,17 @@ func TestDeckyCORSRejectsOtherBrowserOrigins(t *testing.T) {
 }
 
 func TestEnableDisableAndConflict(t *testing.T) {
-	service, _, _, _ := newTestService(t)
+	service, _, store, _ := newTestService(t)
 	enabled := perform(service.Handler(), http.MethodPost, "/v1/games/10/enable", `{"name":"Frontend Game","shortcut":true,"currentLaunch":"MANGOHUD=1 %command%"}`)
 	if enabled.Code != http.StatusOK {
 		t.Fatalf("enable returned %d: %s", enabled.Code, enabled.Body.String())
 	}
-	var managed model.ManageGameResponse
-	if err := json.Unmarshal(enabled.Body.Bytes(), &managed); err != nil {
-		t.Fatal(err)
+	disabled := perform(service.Handler(), http.MethodPost, "/v1/games/10/disable", `{}`)
+	if disabled.Code != http.StatusNoContent {
+		t.Fatalf("disable returned %d: %s", disabled.Code, disabled.Body.String())
 	}
-	conflict := perform(service.Handler(), http.MethodPost, "/v1/games/10/disable", `{"currentLaunch":"user changed"}`)
-	if conflict.Code != http.StatusOK || !strings.Contains(conflict.Body.String(), `"conflict":true`) {
-		t.Fatalf("conflict returned %d: %s", conflict.Code, conflict.Body.String())
-	}
-	restored := perform(service.Handler(), http.MethodPost, "/v1/games/10/disable", `{"currentLaunch":`+jsonString(managed.ManagedLaunch)+`}`)
-	if restored.Code != http.StatusOK || !strings.Contains(restored.Body.String(), `MANGOHUD=1 %command%`) {
-		t.Fatalf("restore returned %d: %s", restored.Code, restored.Body.String())
+	if _, exists := store.Game("10"); exists {
+		t.Fatal("disabled shortcut remains managed")
 	}
 }
 

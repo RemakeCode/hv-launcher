@@ -39,7 +39,6 @@ export function shortcutDescription(
   if (state !== "idle") details.push(state[0].toUpperCase() + state.slice(1));
   if (updating) details.push("Updating…");
   if (game.missing) details.push("Missing from Steam");
-  if (game.conflict) details.push(game.conflict);
   return details.length > 0 ? details.join(" · ") : undefined;
 }
 
@@ -56,5 +55,5 @@ export function shortcutActionError(
   enabled: boolean,
   reason: unknown,
 ): string {
-  return `Failed to ${enabled ? "enable" : "restore"} “${game.name}”: ${errorMessage(reason)}`;
+  return `Failed to ${enabled ? "enable" : "disable"} “${game.name}”: ${errorMessage(reason)}`;
 }
