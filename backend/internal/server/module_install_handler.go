@@ -25,7 +25,7 @@ func (s *Service) installModule(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("selected module archive path must be an absolute bounded path"))
 		return
 	}
-	preflight := s.options.ModulePreflight.Inspect(string(s.options.Controller.State()))
+	preflight := s.options.ModulePreflight.Inspect(r.Context(), string(s.options.Controller.State()))
 	if preflight.ControllerState != "idle" {
 		writeError(w, http.StatusConflict, errors.New("the hypervisor manager must be idle before module setup"))
 		return

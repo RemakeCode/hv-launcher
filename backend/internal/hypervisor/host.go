@@ -43,7 +43,19 @@ func (ExecRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	return command.CombinedOutput()
 }
 
-func (ExecRunner) LookPath(name string) (string, error) { return exec.LookPath(name) }
+func (ExecRunner) LookPath(name string) (string, error) {
+	if strings.ContainsRune(name, filepath.Separator) {
+		return exec.LookPath(name)
+	}
+
+	for _, directory := range []string{"/usr/sbin", "/usr/bin", "/sbin", "/bin"} {
+		if executable, err := exec.LookPath(filepath.Join(directory, name)); err == nil {
+			return executable, nil
+		}
+	}
+
+	return "", exec.ErrNotFound
+}
 
 func (s SysModuleState) Loaded(name string) bool {
 	_, err := s.Reader.ReadDir(filepath.Join(s.Root, name))

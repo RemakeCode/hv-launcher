@@ -75,6 +75,25 @@ func TestPackageCommandsUseCleanSystemEnvironment(t *testing.T) {
 	}
 }
 
+func TestPackageCommandOutputIsBoundedWhileWritesContinue(t *testing.T) {
+	output := &boundedCommandOutput{limit: 4}
+	written, err := output.Write([]byte("abcdef"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != 6 || output.buffer.String() != "abcd" || !output.truncated {
+		t.Fatalf("written = %d, output = %q, truncated = %t", written, output.buffer.String(), output.truncated)
+	}
+
+	written, err = output.Write([]byte("gh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if written != 2 || output.buffer.String() != "abcd" {
+		t.Fatalf("subsequent write = %d, output = %q", written, output.buffer.String())
+	}
+}
+
 func TestPacmanPlanQueriesOwningKernelAndMatchingHeaders(t *testing.T) {
 	executable := testPackageExecutable(t)
 	runner := fakePackageRunner{responses: map[string][]byte{

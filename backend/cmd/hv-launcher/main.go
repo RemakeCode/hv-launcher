@@ -140,7 +140,6 @@ func serveBackend() error {
 		Jobs:            jobs.NewCoordinator(),
 		UMIP:            umip.NewInspector(umip.DefaultPaths()),
 		Capabilities:    capabilities,
-		ModuleInspector: cpuidmodule.NewInspector(),
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
 		ModuleInstaller: cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{}),
 	})

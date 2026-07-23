@@ -2,6 +2,8 @@ package hypervisor
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -16,5 +18,18 @@ func TestExecRunnerDoesNotInheritDynamicLibraryEnvironment(t *testing.T) {
 	}
 	if strings.Contains(string(output), "LD_LIBRARY_PATH=") || strings.Contains(string(output), "LD_PRELOAD=") {
 		t.Fatalf("root command inherited dynamic-library environment: %s", output)
+	}
+}
+
+func TestExecRunnerLookupDoesNotUseInheritedPath(t *testing.T) {
+	directory := t.TempDir()
+	name := "hv-launcher-untrusted-modprobe"
+	if err := os.WriteFile(filepath.Join(directory, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", directory)
+
+	if executable, err := (ExecRunner{}).LookPath(name); err == nil {
+		t.Fatalf("found inherited-PATH executable %q", executable)
 	}
 }
