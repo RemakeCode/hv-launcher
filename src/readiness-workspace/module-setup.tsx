@@ -21,6 +21,8 @@ import { isFilePickerCancellation } from '@/readiness-workspace/readiness-worksp
 import type { ModuleDraft, ModuleDraftAction } from '@/readiness-workspace/readiness-workspace-state';
 
 const MODULE_PICKER_START_PATH = '/home';
+const SETUP_INTERRUPTION_WARNING =
+  'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until installation finishes. Interrupting DKMS setup may require manual cleanup before trying again.';
 
 interface ModuleSetupProps {
   check: Check;
@@ -88,7 +90,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }
     showModal(
       <ConfirmModal
         strTitle='Confirm CPUID module source'
-        strDescription={`HV Launcher cannot verify this archive's origin. DKMS will execute its Makefile as root. ${dependencyDescription} Continue only if you sourced the intended archive.`}
+        strDescription={`HV Launcher cannot verify this archive's origin. DKMS will execute its Makefile as root. ${dependencyDescription} Continue only if you sourced the intended archive. ${SETUP_INTERRUPTION_WARNING}`}
         strOKButtonText='Install module'
         strCancelButtonText='Cancel'
         onOK={() => void startInstall()}
@@ -148,6 +150,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }
       {draft.archivePath && !progressVisible && draft.stage !== 'selecting' && (
         <Field label='Selected source archive' description={draft.archivePath} />
       )}
+      {progressVisible && <Field label='Do not interrupt setup' description={SETUP_INTERRUPTION_WARNING} />}
       {progressVisible && draft.job && (
         <>
           <ProgressBarWithInfo nProgress={draft.job.progress} sOperationText={humanize(draft.job.phase)} />

@@ -24,6 +24,8 @@ import {
 } from './readiness-workspace-state';
 
 const PROTON_PICKER_START_PATH = '/home';
+const SETUP_INTERRUPTION_WARNING =
+    'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until installation finishes.';
 // Decky filters by the final suffix; exact multi-suffix validation happens after selection.
 const PROTON_PICKER_EXTENSIONS = ['gz', 'tgz', 'xz'];
 
@@ -91,7 +93,7 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
         showModal(
             <ConfirmModal
                 strTitle='Confirm Proton archive source'
-                strDescription={selection.responsibility}
+                strDescription={`${selection.responsibility} ${SETUP_INTERRUPTION_WARNING}`}
                 strOKButtonText='Install archive'
                 strCancelButtonText='Cancel'
                 onOK={() => void startInstall()}
@@ -153,8 +155,11 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
             {draft.stage === 'installing' && !draft.job && (
                 <Field label='Starting installation' description='Preparing the selected Proton installation…' />
             )}
+            {progressVisible && <Field label='Do not interrupt setup' description={SETUP_INTERRUPTION_WARNING} />}
             {progressVisible && draft.job && (
-                <ProgressBarWithInfo nProgress={draft.job.progress} sOperationText={humanize(draft.job.phase)} />
+                <>
+                    <ProgressBarWithInfo nProgress={draft.job.progress} sOperationText={humanize(draft.job.phase)} />
+                </>
             )}
             {draft.error && (
                 <ReadinessItem

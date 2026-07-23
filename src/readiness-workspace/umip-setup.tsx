@@ -19,6 +19,9 @@ import { readinessError } from '../shortcut-management/management';
 import type { Check, UMIPBootloader, UMIPCandidate } from '../types';
 import type { UMIPDraft, UMIPDraftAction } from './readiness-workspace-state';
 
+const SETUP_INTERRUPTION_WARNING =
+  'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until the boot configuration update finishes.';
+
 interface UMIPSetupProps {
   check: Check;
   draft: UMIPDraft;
@@ -29,7 +32,7 @@ interface UMIPSetupProps {
 export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupProps) {
   const inspection = draft.inspection;
   const candidate = inspection?.candidates.find((item) => item.bootloader === draft.selected);
-  const progressVisible = draft.stage === 'applying' && draft.job;
+  const progressVisible = draft.stage === 'applying';
 
   const startApply = async () => {
     if (!draft.selected) return;
@@ -50,7 +53,7 @@ export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupPr
     showModal(
       <ConfirmModal
         strTitle='Update boot configuration?'
-        strDescription={`HV Launcher will add clearcpuid=514 to ${candidate.configuration}, run ${formatUpdater(candidate.updater.path, candidate.updater.args)}, and then require a system restart.`}
+        strDescription={`HV Launcher will add clearcpuid=514 to ${candidate.configuration}, run ${formatUpdater(candidate.updater.path, candidate.updater.args)}, and then require a system restart. ${SETUP_INTERRUPTION_WARNING}`}
         strOKButtonText='Update configuration'
         strCancelButtonText='Cancel'
         onOK={() => void startApply()}
@@ -155,10 +158,10 @@ export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupPr
 
       {progressVisible && (
         <>
-          <ProgressBarWithInfo
-            nProgress={draft.job?.progress ?? 0}
-            sOperationText={humanize(draft.job?.phase ?? 'starting')}
-          />
+          <Field label='Do not interrupt setup' description={SETUP_INTERRUPTION_WARNING} />
+          {draft.job && (
+            <ProgressBarWithInfo nProgress={draft.job.progress} sOperationText={humanize(draft.job.phase)} />
+          )}
           {draft.job?.output.length ? (
             <Field label='Latest update' description={draft.job.output[draft.job.output.length - 1]} />
           ) : null}
