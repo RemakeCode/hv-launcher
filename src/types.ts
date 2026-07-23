@@ -54,7 +54,6 @@ export interface Game {
   enabled: boolean;
   running: boolean;
   missing?: boolean;
-  conflict?: string;
 }
 
 export interface ManagedGame {
@@ -75,13 +74,6 @@ export interface ManageResponse {
   appId: string;
   managedLaunch: string;
   wrapperPath: string;
-}
-
-export interface RestoreResponse {
-  appId: string;
-  originalLaunch?: string;
-  conflict: boolean;
-  message?: string;
 }
 
 export type DisplayState = "idle" | "launching" | "running" | "stopping";

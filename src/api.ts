@@ -2,7 +2,6 @@ import { Fetcher, FetcherError } from "./shared/fetcher";
 import type {
   Configuration,
   ManageResponse,
-  RestoreResponse,
   ActiveSetupJob,
   ProtonPreflightResponse,
   SetupJobSnapshot,
@@ -29,8 +28,8 @@ export const enableGame = (
   shortcut,
   currentLaunch,
 });
-export const disableGame = (appId: string, currentLaunch: string) =>
-  fetcher.post<RestoreResponse>(`/games/${appId}/disable`, { currentLaunch });
+export const disableGame = (appId: string) =>
+  fetcher.post<void>(`/games/${appId}/disable`, {});
 export const postLifetime = (appId: string, instanceId: number, running: boolean) =>
   fetcher.post<{ status?: string } | undefined>("/lifetime", {
     appId,

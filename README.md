@@ -70,7 +70,7 @@ journalctl -u plugin_loader -f
 
 ### Disable and uninstall
 
-Turn off management for every game before uninstalling. This lets HV Launcher restore each shortcut to its original state. If a shortcut was changed elsewhere after it was enabled, HV Launcher keeps the newer value and reports the conflict instead of overwriting it.
+Turn off management for every game before uninstalling. This lets HV Launcher restore each shortcut to its original state. If a shortcut was changed or recreated after it was enabled, HV Launcher keeps the newer value and removes its stale management record instead of overwriting the shortcut.
 
 If you uninstall the plugin first, reinstall it and turn off management for each game before removing it again. Advanced users can restore the Steam launch values manually before deleting `~/.local/share/hv-launcher`.
 

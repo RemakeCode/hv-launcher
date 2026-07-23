@@ -57,17 +57,17 @@ func (s *Service) disableGame(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var request model.RestoreRequest
+	var request struct{}
 	if !decodeStrict(w, r, &request) {
 		return
 	}
 
-	response, err := s.options.Manager.Restore(appID, request.CurrentLaunch)
-	if err != nil {
-		s.options.Logger.Error("failed to restore shortcut launch options", "app_id", appID, "error", err)
+	if err := s.options.Manager.Disable(appID); err != nil {
+		s.options.Logger.Error("failed to disable shortcut management", "app_id", appID, "error", err)
 		writeError(w, http.StatusNotFound, err)
 		return
 	}
-	s.options.Logger.Info("shortcut management disabled", "app_id", appID, "conflict", response.Conflict)
-	writeJSON(w, http.StatusOK, response)
+
+	s.options.Logger.Info("shortcut management disabled", "app_id", appID)
+	w.WriteHeader(http.StatusNoContent)
 }

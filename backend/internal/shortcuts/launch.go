@@ -55,20 +55,17 @@ func (m *Manager) Enable(appID, name string, shortcut bool, currentLaunch string
 	return game, nil
 }
 
-func (m *Manager) Restore(appID, currentLaunch string) (model.RestoreResponse, error) {
-	game, exists := m.Store.Game(appID)
+func (m *Manager) Disable(appID string) error {
+	_, exists := m.Store.Game(appID)
 	if !exists {
-		return model.RestoreResponse{}, fmt.Errorf("App ID %s is not managed", appID)
-	}
-
-	if currentLaunch != game.ManagedLaunch && currentLaunch != game.OriginalLaunch {
-		return model.RestoreResponse{AppID: appID, Conflict: true, Message: "Steam launch value was changed after management was enabled"}, nil
+		return fmt.Errorf("App ID %s is not managed", appID)
 	}
 
 	if err := m.Store.DeleteGame(appID); err != nil {
-		return model.RestoreResponse{}, err
+		return err
 	}
-	return model.RestoreResponse{AppID: appID, OriginalLaunch: game.OriginalLaunch}, nil
+
+	return nil
 }
 
 func shellQuote(value string) string {
