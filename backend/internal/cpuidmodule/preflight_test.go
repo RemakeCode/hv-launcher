@@ -1,14 +1,22 @@
 package cpuidmodule
 
 import (
+	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
+type contextPackageRunner struct{}
+
+func (contextPackageRunner) Run(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+	return nil, ctx.Err()
+}
+
 func TestPreflightFindsReadyRunningKernelAndGCCRequirements(t *testing.T) {
 	paths := readyPreflightPaths(t, false)
-	preflight := NewPreflightInspector(paths).Inspect("idle")
+	preflight := NewPreflightInspector(paths).Inspect(context.Background(), "idle")
 	if !preflight.Ready || preflight.KernelRelease != "6.18.7-test" || preflight.Toolchain != "gcc" ||
 		preflight.PackageManager != "pacman" || preflight.DistributionID != "cachyos" || preflight.Lockdown != "none" ||
 		preflight.DependencyPlan != nil {
@@ -26,14 +34,14 @@ func TestPreflightRequiresClangToolchainForClangKernel(t *testing.T) {
 	for _, executable := range append(append([]string{}, paths.ClangExecutables...), append(paths.LLDExecutables, paths.LLVMExecutables...)...) {
 		_ = os.Remove(executable)
 	}
-	preflight := NewPreflightInspector(paths).Inspect("idle")
+	preflight := NewPreflightInspector(paths).Inspect(context.Background(), "idle")
 	if preflight.Ready || preflight.Toolchain != "clang" || checkOK(preflight, "clang") || checkOK(preflight, "lld") || checkOK(preflight, "llvm") {
 		t.Fatalf("missing Clang requirements passed: %+v", preflight)
 	}
 	for _, executable := range []string{paths.ClangExecutables[0], paths.LLDExecutables[0], paths.LLVMExecutables[0]} {
 		writeExecutable(t, executable)
 	}
-	if ready := NewPreflightInspector(paths).Inspect("idle"); !ready.Ready {
+	if ready := NewPreflightInspector(paths).Inspect(context.Background(), "idle"); !ready.Ready {
 		t.Fatalf("complete Clang requirements failed: %+v", ready)
 	}
 }
@@ -45,26 +53,26 @@ func TestPreflightBlocksKernelMismatchAndActiveControllerButNotMissingPackageMan
 			_ = os.Remove(executable)
 		}
 	}
-	withoutManager := NewPreflightInspector(paths).Inspect("idle")
+	withoutManager := NewPreflightInspector(paths).Inspect(context.Background(), "idle")
 	if !withoutManager.Ready || checkOK(withoutManager, "package-manager") {
 		t.Fatalf("package manager incorrectly blocked complete preflight: %+v", withoutManager)
 	}
 
 	buildRelease := filepath.Join(paths.ModulesRoot, "6.18.7-test", "build", "include", "config", "kernel.release")
 	writePreflightFile(t, buildRelease, "another-kernel\n", 0o644)
-	mismatch := NewPreflightInspector(paths).Inspect("idle")
+	mismatch := NewPreflightInspector(paths).Inspect(context.Background(), "idle")
 	if mismatch.Ready || checkOK(mismatch, "kernel-build") {
 		t.Fatalf("mismatched build tree passed: %+v", mismatch)
 	}
 	writePreflightFile(t, buildRelease, "6.18.7-test\n", 0o644)
-	active := NewPreflightInspector(paths).Inspect("active")
+	active := NewPreflightInspector(paths).Inspect(context.Background(), "active")
 	if active.Ready || checkOK(active, "controller") {
 		t.Fatalf("active controller passed: %+v", active)
 	}
 }
 
 func TestPreflightDoesNotPlanPackagesForControllerState(t *testing.T) {
-	preflight := NewPreflightInspector(readyPreflightPaths(t, false)).Inspect("active")
+	preflight := NewPreflightInspector(readyPreflightPaths(t, false)).Inspect(context.Background(), "active")
 	if preflight.DependencyPlan != nil {
 		t.Fatalf("active controller created an unnecessary dependency plan: %+v", preflight)
 	}
@@ -82,9 +90,27 @@ func TestPreflightExposesAnAdapterPlanWhenBuildRequirementsAreMissing(t *testing
 	runner := fakePackageRunner{responses: map[string][]byte{
 		"--simulate install linux-headers-" + release + " dkms build-essential": []byte("The following NEW packages will be installed: linux-headers-" + release + " dkms build-essential\n"),
 	}}
-	preflight := NewPreflightInspectorWithRunner(paths, runner).Inspect("idle")
+	preflight := NewPreflightInspectorWithRunner(paths, runner).Inspect(context.Background(), "idle")
 	if preflight.DependencyPlan == nil || !contains(preflight.DependencyPlan.Packages, "linux-headers-"+release) {
 		t.Fatalf("expected dependency plan: %+v", preflight)
+	}
+}
+
+func TestPreflightPackagePlanningUsesCallerContext(t *testing.T) {
+	paths := readyPreflightPaths(t, false)
+	release := "6.18.7-test"
+	if err := os.RemoveAll(filepath.Join(paths.ModulesRoot, release, "build")); err != nil {
+		t.Fatal(err)
+	}
+	paths.PackageManagers = map[string][]string{"apt": {filepath.Join(filepath.Dir(paths.DKMSExecutables[0]), "apt-get")}}
+	writeExecutable(t, paths.PackageManagers["apt"][0])
+	writePreflightFile(t, paths.OSRelease, "ID=ubuntu\n", 0o644)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	preflight := NewPreflightInspectorWithRunner(paths, contextPackageRunner{}).Inspect(ctx, "idle")
+	if !strings.Contains(preflight.DependencyPlanError, context.Canceled.Error()) {
+		t.Fatalf("dependency plan error = %q", preflight.DependencyPlanError)
 	}
 }
 

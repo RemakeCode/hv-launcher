@@ -9,7 +9,10 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
+
+const packagePreviewTimeout = 15 * time.Second
 
 type PreflightPaths struct {
 	KernelRelease      string
@@ -64,7 +67,7 @@ func NewPreflightInspectorWithRunner(paths PreflightPaths, runner PackageCommand
 	return inspector
 }
 
-func (i *PreflightInspector) Inspect(controllerState string) Preflight {
+func (i *PreflightInspector) Inspect(ctx context.Context, controllerState string) Preflight {
 	result := Preflight{ControllerState: controllerState, Checks: make([]PreflightCheck, 0, 8)}
 	releaseData, err := readBoundedFile(i.Paths.KernelRelease, 4<<10)
 	release := strings.TrimSpace(string(releaseData))
@@ -118,7 +121,10 @@ func (i *PreflightInspector) Inspect(controllerState string) Preflight {
 
 	result.add("controller", controllerState == "idle", detail(controllerState == "idle", "idle", "The hypervisor manager must be idle before module setup"))
 	if managerExecutable != "" && !dependenciesReady(result) {
-		dependencyPlan, dependencyPlanErr := i.Registry.Plan(context.Background(), DependencyPlanRequest{
+		previewCtx, cancel := context.WithTimeout(ctx, packagePreviewTimeout)
+		defer cancel()
+
+		dependencyPlan, dependencyPlanErr := i.Registry.Plan(previewCtx, DependencyPlanRequest{
 			Distribution:  distribution,
 			Manager:       result.PackageManager,
 			Executable:    managerExecutable,

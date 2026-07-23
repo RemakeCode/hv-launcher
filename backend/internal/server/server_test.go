@@ -111,7 +111,6 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 		Proton: proton.NewInstaller(root), Jobs: jobs.NewCoordinator(),
 		UMIP:            umipInspector,
 		Capabilities:    capabilities,
-		ModuleInspector: cpuidmodule.NewInspector(),
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
 		ModuleInstaller: cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{}),
 	})

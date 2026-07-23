@@ -11,7 +11,7 @@ const (
 	MaxDKMSConfigBytes   int64 = 64 << 10 // 64 KiB
 	MaxEntries                 = 256
 	MaxPathBytes               = 512
-	MaxSelectedPathBytes       = 4_000
+	MaxSelectedPathBytes       = 4_096
 )
 
 var (

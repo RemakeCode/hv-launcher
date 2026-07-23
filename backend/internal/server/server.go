@@ -42,7 +42,6 @@ type Options struct {
 	Jobs            *jobs.Coordinator
 	UMIP            *umip.Inspector
 	Capabilities    *auth.Verifier
-	ModuleInspector *cpuidmodule.Inspector
 	ModulePreflight *cpuidmodule.PreflightInspector
 	ModuleInstaller *cpuidmodule.Installer
 }
@@ -57,7 +56,7 @@ type Service struct {
 func New(options Options) (*Service, error) {
 	if options.Config == nil || options.Inspector == nil || options.Manager == nil || options.Controller == nil ||
 		options.Proton == nil || options.Jobs == nil || options.UMIP == nil ||
-		options.Capabilities == nil || options.ModuleInspector == nil || options.ModulePreflight == nil ||
+		options.Capabilities == nil || options.ModulePreflight == nil ||
 		options.ModuleInstaller == nil {
 		return nil, errors.New("configuration, inspector, manager, controller, and setup services are required")
 	}
@@ -148,11 +147,17 @@ func (s *Service) Serve(ctx context.Context) error {
 	case <-ctx.Done():
 		s.options.Logger.Info("HTTP service shutting down")
 		s.accepting.Store(false)
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+
+		closeErr := s.server.Close()
+		if errors.Is(closeErr, http.ErrServerClosed) {
+			closeErr = nil
+		}
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		defer cancel()
-		shutdownErr := s.server.Shutdown(shutdownCtx)
+
 		restoreErr := s.options.Controller.Shutdown(shutdownCtx)
-		result := errors.Join(shutdownErr, restoreErr)
+		result := errors.Join(closeErr, restoreErr)
 		if result != nil {
 			s.options.Logger.Error("backend shutdown failed", "error", result)
 		} else {

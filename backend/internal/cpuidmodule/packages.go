@@ -2,6 +2,7 @@ package cpuidmodule
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -19,6 +20,12 @@ type PackageCommandRunner interface {
 }
 
 type ExecPackageCommandRunner struct{}
+
+type boundedCommandOutput struct {
+	buffer    bytes.Buffer
+	limit     int
+	truncated bool
+}
 
 // Distribution is the small, parsed subset of /etc/os-release used for
 // adapter selection. ID_LIKE is informational and never selects an adapter by
@@ -78,9 +85,13 @@ var (
 	ErrPackageManagerBusy      = errors.New("package manager is busy")
 	ErrUnsafeDependencyPlan    = errors.New("unsafe dependency plan")
 	ErrMissingKernelHeaders    = errors.New("matching kernel headers are unavailable")
+	ErrCommandOutputLimit      = errors.New("command output exceeded the capture limit")
 )
 
-const maxPackagePreviewBytes = 16 << 10
+const (
+	maxPackagePreviewBytes = 16 << 10
+	maxPackageCommandBytes = 1 << 20
+)
 
 var (
 	packageNamePattern   = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9+_.:@~-]{0,127}$`)
@@ -89,7 +100,29 @@ var (
 )
 
 func (ExecPackageCommandRunner) Run(ctx context.Context, name string, args ...string) ([]byte, error) {
-	return execPackageCommand(ctx, name, args...).CombinedOutput()
+	command := execPackageCommand(ctx, name, args...)
+	output := &boundedCommandOutput{limit: maxPackageCommandBytes}
+	command.Stdout = output
+	command.Stderr = output
+
+	runErr := command.Run()
+	if output.truncated {
+		runErr = errors.Join(runErr, ErrCommandOutputLimit)
+	}
+
+	return output.buffer.Bytes(), runErr
+}
+
+func (w *boundedCommandOutput) Write(data []byte) (int, error) {
+	remaining := w.limit - w.buffer.Len()
+	if remaining > 0 {
+		_, _ = w.buffer.Write(data[:min(len(data), remaining)])
+	}
+	if len(data) > remaining {
+		w.truncated = true
+	}
+
+	return len(data), nil
 }
 
 func execPackageCommand(ctx context.Context, name string, args ...string) *exec.Cmd {

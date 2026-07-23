@@ -25,6 +25,12 @@ type fakeHost struct {
 	lookErr  error
 }
 
+func TestNewSessionIDReturnsRandomSourceFailure(t *testing.T) {
+	if _, err := newSessionID(strings.NewReader("short")); err == nil {
+		t.Fatal("newSessionID accepted insufficient randomness")
+	}
+}
+
 type memoryJournal struct {
 	record *JournalRecord
 	writes int

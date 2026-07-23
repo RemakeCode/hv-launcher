@@ -82,7 +82,13 @@ func (c *Controller) StartSession(ctx context.Context, appID, source string) (mo
 		return model.Session{}, ErrRecoveryRequired
 	}
 
-	session := model.Session{ID: newSessionID(), AppID: appID, Source: source}
+	sessionID, err := newSessionID(rand.Reader)
+	if err != nil {
+		c.options.Logger.Error("session start rejected", "app_id", appID, "error", err)
+		return model.Session{}, err
+	}
+
+	session := model.Session{ID: sessionID, AppID: appID, Source: source}
 	if len(c.sessions) == 0 {
 		if c.options.Modules.Loaded("cpuid_fault_emulation") && !c.owned {
 			c.state = StateEmulationActive
@@ -399,11 +405,11 @@ func journalSession(session model.Session) JournalSession {
 	return JournalSession{ID: session.ID, AppID: session.AppID, InstanceID: session.InstanceID, Source: session.Source}
 }
 
-func newSessionID() string {
+func newSessionID(random io.Reader) (string, error) {
 	buffer := make([]byte, 16)
-	if _, err := rand.Read(buffer); err != nil {
-		panic(err)
+	if _, err := io.ReadFull(random, buffer); err != nil {
+		return "", fmt.Errorf("generate session ID: %w", err)
 	}
 
-	return hex.EncodeToString(buffer)
+	return hex.EncodeToString(buffer), nil
 }
