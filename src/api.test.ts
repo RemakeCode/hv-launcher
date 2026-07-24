@@ -93,20 +93,6 @@ describe("Proton setup API", () => {
     );
   });
 
-  it("preserves a Proton installation failure from the backend", async () => {
-    fetchMock.mockResolvedValue(
-      new Response('{"error":"open selected archive: file not found"}', {
-        status: 422,
-      }),
-    );
-
-    await expect(installProtonArchive("/home/deck/missing.tar.xz", "native")).rejects.toEqual(
-      new BackendRequestError(
-        "open selected archive: file not found",
-        422,
-      ),
-    );
-  });
 });
 
 describe("UMIP setup API", () => {

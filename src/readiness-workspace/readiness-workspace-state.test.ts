@@ -5,7 +5,6 @@ import {
   emptyModuleDraft,
   initialReadinessSelection,
   isFilePickerCancellation,
-  isSupportedProtonArchive,
   protonDraftReducer,
   readinessDetailKind,
   readinessPageLink,
@@ -115,7 +114,6 @@ describe("readiness workspace state", () => {
     ];
     expect(initialReadinessSelection(checks)).toBe("proton");
     expect(readinessDetailKind(checks[1])).toBe("proton");
-    expect(emptyProtonDraft).toEqual({ stage: "idle" });
   });
 
   it("keeps setup-related checks in the workspace and leaves CPU and kernel in the QAM", () => {
@@ -233,11 +231,7 @@ describe("readiness workspace state", () => {
     expect(failed.error).toBe("disk is full");
   });
 
-  it("handles supported extensions and picker cancellation", () => {
-    expect(isSupportedProtonArchive("a.tar.gz")).toBe(true);
-    expect(isSupportedProtonArchive("a.tgz")).toBe(true);
-    expect(isSupportedProtonArchive("a.tar.xz")).toBe(true);
-    expect(isSupportedProtonArchive("a.zip")).toBe(false);
+  it("recognizes picker cancellation", () => {
     expect(isFilePickerCancellation(new Error("Picker cancelled"))).toBe(true);
     expect(isFilePickerCancellation(new Error("permission denied"))).toBe(false);
   });

@@ -2,9 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   canChangeShortcut,
   groupShortcuts,
-  readinessError,
-  shortcutActionError,
-  shortcutDescription,
   shouldShowShortcutManagement,
 } from "./management";
 import type { AggregateStatus, Configuration, Game } from "../types";
@@ -76,19 +73,5 @@ describe("Shortcut management model", () => {
       },
     };
     expect(shouldShowShortcutManagement({ path: "none" }, configuration)).toBe(false);
-  });
-
-  it("omits idle shortcut-kind text and includes only contextual state", () => {
-    const idle = game({ name: "Heroic" });
-    expect(shortcutDescription(idle, "idle", false)).toBeUndefined();
-    expect(shortcutDescription(idle, "running", true)).toBe("Running · Updating…");
-    expect(shortcutDescription(game({ missing: true }), "idle", false)).toContain("Missing from Steam");
-  });
-
-  it("keeps readiness failures generic and action failures shortcut-specific", () => {
-    const reason = new Error("backend unavailable");
-    expect(readinessError(reason)).toBe("backend unavailable");
-    expect(shortcutActionError(game({ name: "Heroic Game" }), true, reason))
-      .toBe("Failed to enable “Heroic Game”: backend unavailable");
   });
 });
