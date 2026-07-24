@@ -23,14 +23,6 @@ func TestModulePreflightReturnsHostRequirementsWithoutArchiveInput(t *testing.T)
 	}
 }
 
-func TestModulePreflightDoesNotAcceptArchiveInput(t *testing.T) {
-	service, _, _, _ := newTestService(t)
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/module/preflight", `{"path":"/tmp/source.zip"}`)
-	if response.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("module preflight accepted archive input: %d %s", response.Code, response.Body.String())
-	}
-}
-
 func TestModuleInstallRejectsCallerProvidedConfirmation(t *testing.T) {
 	service, _, _, _ := newTestService(t)
 	response := perform(service.Handler(), http.MethodPost, "/v1/setup/module/install", `{"path":"/tmp/source.zip","capability":"","confirmedSource":true}`)

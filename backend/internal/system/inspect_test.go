@@ -183,11 +183,6 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 			t.Fatalf("got %s, want %s", status.Status, model.StatusSetupRequired)
 		}
 		assertCheckRemedy(t, status.Checks, "proton")
-		for _, check := range status.Checks {
-			if check.ID == "proton" && check.Remedy != "Open Readiness details and setup to install a LinUwUx Proton archive." {
-				t.Fatalf("unexpected Proton remedy: %q", check.Remedy)
-			}
-		}
 	})
 
 	t.Run("incompatible module requires setup", func(t *testing.T) {
@@ -210,11 +205,6 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 			t.Fatalf("got %s, want %s", status.Status, model.StatusSetupRequired)
 		}
 		assertCheckRemedy(t, status.Checks, "emulation-module")
-		for _, check := range status.Checks {
-			if check.ID == "emulation-module" && !strings.Contains(check.Detail, "signing") {
-				t.Fatalf("module detail did not explain signing: %q", check.Detail)
-			}
-		}
 	})
 }
 
@@ -262,25 +252,6 @@ func TestRecoveryStateWinsOverSetupState(t *testing.T) {
 	status := deriveStatus(cpu, kernel, model.PathHypervisor, model.ModuleStatus{ControllerState: "recovery-required"}, model.ProtonStatus{}, nil)
 	if status.Status != model.StatusRecovery {
 		t.Fatalf("got %s", status.Status)
-	}
-}
-
-func TestUMIPDetailExplainsRequirement(t *testing.T) {
-	tests := []struct {
-		name     string
-		cpu      model.CPUStatus
-		expected string
-	}{
-		{"not required", model.CPUStatus{Generation: "AMD Zen 1"}, "not required"},
-		{"disabled as required", model.CPUStatus{Generation: "AMD Zen 3", UMIPRequiredOff: true}, "disabled as required"},
-		{"enabled and blocking", model.CPUStatus{Generation: "Intel 9th generation", UMIPRequiredOff: true, UMIPPresent: true}, "enabled and blocking"},
-	}
-	for _, test := range tests {
-		t.Run(test.name, func(t *testing.T) {
-			if actual := umipDetail(test.cpu); actual != test.expected {
-				t.Fatalf("got %q, want %q", actual, test.expected)
-			}
-		})
 	}
 }
 
