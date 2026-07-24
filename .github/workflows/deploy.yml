@@ -57,12 +57,12 @@ jobs:
       - name: Verify plugin package
         run: task package:verify
 
-      - name: Upload CI package
+      - name: Upload installable CI package
         if: github.event_name != 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: hv-launcher-${{ github.sha }}
           path: package/hv-launcher.zip
+          archive: false
           retention-days: 30
           if-no-files-found: error
 

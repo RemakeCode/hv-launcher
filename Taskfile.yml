@@ -145,7 +145,7 @@ tasks:
       - rollup.config.js
       - tsconfig.json
     cmds:
-      - npm run build
+      - NODE_ENV=development npm run build
       - task: dev:deploy
 
   dev:backend:

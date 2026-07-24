@@ -23,7 +23,7 @@ if (!visualFixtures.has(visualFixture)) {
     throw new Error(`Unknown HV_QAM_VISUAL_FIXTURE: ${visualFixture}`);
 }
 
-export default deckyPlugin({
+const config = deckyPlugin({
     plugins: [
         replace({
             preventAssignment: true,
@@ -31,3 +31,7 @@ export default deckyPlugin({
         })
     ]
 });
+
+config.output.sourcemap = process.env.NODE_ENV === 'development';
+
+export default config;
