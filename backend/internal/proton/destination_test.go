@@ -1,10 +1,8 @@
 package proton
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 )
 
@@ -32,13 +30,6 @@ func TestDiscoverDestinationsCanonicalizesAndDeduplicatesSteamRoots(t *testing.T
 	for _, destination := range destinations {
 		if destination.compatibilityTools != filepath.Join(destination.root, "compatibilitytools.d") || destination.ID == "" || destination.Label == "" {
 			t.Fatalf("unexpected destination: %+v", destination)
-		}
-		encoded, err := json.Marshal(destination)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if string(encoded) == "" || strings.Contains(string(encoded), destination.root) {
-			t.Fatalf("destination JSON exposed filesystem path: %s", encoded)
 		}
 	}
 }

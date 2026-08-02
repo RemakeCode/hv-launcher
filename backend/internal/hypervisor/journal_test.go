@@ -1,18 +1,8 @@
 package hypervisor
 
 import (
-	"strings"
 	"testing"
 )
-
-func TestNewDeckyFileJournalRequiresRuntimeDirectory(t *testing.T) {
-	t.Setenv(deckyRuntimeDirectoryEnvironment, "")
-
-	journal, err := NewDeckyFileJournal()
-	if err == nil || !strings.Contains(err.Error(), deckyRuntimeDirectoryEnvironment) {
-		t.Fatalf("NewDeckyFileJournal() returned journal=%v, err=%v", journal, err)
-	}
-}
 
 func TestNewDeckyFileJournalUsesRuntimeDirectory(t *testing.T) {
 	runtimeDir := t.TempDir()

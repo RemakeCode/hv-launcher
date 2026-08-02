@@ -197,23 +197,25 @@ func differentBase64Character(value byte) string {
 	return "A"
 }
 
-func TestLoadEnvironmentClearsValidSecret(t *testing.T) {
-	secret := []byte(strings.Repeat("s", SecretBytes))
-	t.Setenv(EnvironmentVariable, base64.RawURLEncoding.EncodeToString(secret))
-	if _, err := LoadEnvironment(); err != nil {
-		t.Fatalf("LoadEnvironment() error: %v", err)
+func TestLoadEnvironmentClearsSetupSecret(t *testing.T) {
+	valid := base64.RawURLEncoding.EncodeToString([]byte(strings.Repeat("s", SecretBytes)))
+	environments := []struct {
+		name    string
+		value   string
+		wantErr bool
+	}{
+		{name: "valid", value: valid},
+		{name: "malformed", value: "malformed", wantErr: true},
 	}
-	if _, present := os.LookupEnv(EnvironmentVariable); present {
-		t.Fatal("setup secret remained in the Go process environment")
-	}
-}
-
-func TestLoadEnvironmentClearsMalformedSecret(t *testing.T) {
-	t.Setenv(EnvironmentVariable, "malformed")
-	if _, err := LoadEnvironment(); err == nil {
-		t.Fatal("LoadEnvironment() unexpectedly accepted malformed secret")
-	}
-	if _, present := os.LookupEnv(EnvironmentVariable); present {
-		t.Fatal("malformed setup secret remained in the environment")
+	for _, test := range environments {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv(EnvironmentVariable, test.value)
+			if _, err := LoadEnvironment(); (err != nil) != test.wantErr {
+				t.Fatalf("LoadEnvironment() error: %v, wantErr: %v", err, test.wantErr)
+			}
+			if _, present := os.LookupEnv(EnvironmentVariable); present {
+				t.Fatal("setup secret remained in the Go process environment")
+			}
+		})
 	}
 }

@@ -3,7 +3,6 @@ package shortcuts
 import (
 	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"hv-launcher/internal/config"
@@ -19,6 +18,10 @@ func TestManagedLaunchValuePreservesLaunchForms(t *testing.T) {
 	}{
 		{"empty", "", prefix},
 		{"arguments only", "run com.heroicgameslauncher.hgl heroic://game", prefix + " run com.heroicgameslauncher.hgl heroic://game"},
+		{"heroic launcher", `heroic launch legendary-game`, prefix + ` heroic launch legendary-game`},
+		{"flatpak heroic", `run --branch=stable --arch=x86_64 --command=heroic com.heroicgameslauncher.hgl heroic://launch/game`, prefix + ` run --branch=stable --arch=x86_64 --command=heroic com.heroicgameslauncher.hgl heroic://launch/game`},
+		{"lutris", `lutris lutris:rungame/game`, prefix + ` lutris lutris:rungame/game`},
+		{"flatpak lutris", `run net.lutris.Lutris lutris:rungameid/42`, prefix + ` run net.lutris.Lutris lutris:rungameid/42`},
 		{"command token", "%command% --foo", prefix + " --foo"},
 		{"environment prefix", "MANGOHUD=1 %command% --foo", "MANGOHUD=1 " + prefix + " --foo"},
 		{"quoted arguments", `%command% --name "My Game"`, prefix + ` --name "My Game"`},
@@ -40,24 +43,6 @@ func TestManagedLaunchValueRejectsNestedWrapper(t *testing.T) {
 	_, err := ManagedLaunchValue("/plugin/bin/hv-launcher run --app-id 42 -- %command%", "/wrapper", "42")
 	if !errors.Is(err, ErrAlreadyManaged) {
 		t.Fatalf("got %v", err)
-	}
-}
-
-func TestLauncherCommandFixturesRemainInsideWrapper(t *testing.T) {
-	fixtures := []string{
-		`heroic launch legendary-game`,
-		`run --branch=stable --arch=x86_64 --command=heroic com.heroicgameslauncher.hgl heroic://launch/game`,
-		`lutris lutris:rungame/game`,
-		`run net.lutris.Lutris lutris:rungameid/42`,
-	}
-	for _, original := range fixtures {
-		managed, err := ManagedLaunchValue(original, "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher", "2147483714")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.HasSuffix(managed, original) || !strings.Contains(managed, "-- %command%") {
-			t.Fatalf("launcher command was not preserved: %s", managed)
-		}
 	}
 }
 

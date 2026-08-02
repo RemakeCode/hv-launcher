@@ -69,12 +69,8 @@ func TestPreflightBlocksKernelMismatchAndActiveControllerButNotMissingPackageMan
 	if active.Ready || checkOK(active, "controller") {
 		t.Fatalf("active controller passed: %+v", active)
 	}
-}
-
-func TestPreflightDoesNotPlanPackagesForControllerState(t *testing.T) {
-	preflight := NewPreflightInspector(readyPreflightPaths(t, false)).Inspect(context.Background(), "active")
-	if preflight.DependencyPlan != nil {
-		t.Fatalf("active controller created an unnecessary dependency plan: %+v", preflight)
+	if active.DependencyPlan != nil {
+		t.Fatalf("active controller created an unnecessary dependency plan: %+v", active.DependencyPlan)
 	}
 }
 
