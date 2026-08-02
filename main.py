@@ -24,10 +24,41 @@ class Plugin:
         self.process = None
         self._setup_secret = secrets.token_bytes(32)
 
+    async def _stop_stale_backends(self):
+        binary = Path(decky.DECKY_PLUGIN_DIR) / "bin" / "hv-launcher"
+        target = str(binary)
+        matching = []
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                resolved = os.readlink(os.path.join("/proc", entry, "exe"))
+            except OSError:
+                continue
+            if resolved == target or resolved == target + " (deleted)":
+                matching.append(int(entry))
+        if not matching:
+            return
+
+        decky.logger.info("Stopping stale HV Launcher backend(s): %s", matching)
+        for pid in matching:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+        await asyncio.sleep(2)
+        for pid in matching:
+            try:
+                os.kill(pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+
     async def _main(self):
         binary = Path(decky.DECKY_PLUGIN_DIR) / "bin" / "hv-launcher"
         if not binary.is_file():
             raise RuntimeError(f"Go backend is missing: {binary}")
+
+        await self._stop_stale_backends()
 
         decky.logger.info("Starting Go backend: %s", binary)
         try:
@@ -45,24 +76,8 @@ class Plugin:
             raise RuntimeError(f"Failed to start Go backend: {error}") from error
 
     async def _stop(self):
-        process = self.process
         self.process = None
-        if process is None or process.returncode is not None:
-            return
-
-        decky.logger.info("Stopping Go backend")
-        try:
-            os.killpg(process.pid, signal.SIGTERM)
-            try:
-                await asyncio.wait_for(process.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                decky.logger.warning("Go backend did not stop gracefully; sending SIGKILL")
-                os.killpg(process.pid, signal.SIGKILL)
-                await asyncio.wait_for(process.wait(), timeout=3)
-        except ProcessLookupError:
-            pass
-        except Exception as error:
-            decky.logger.error("Failed to stop Go backend: %s", error)
+        await self._stop_stale_backends()
 
     async def _unload(self):
         await self._stop()
