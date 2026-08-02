@@ -1,10 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  canChangeShortcut,
   groupShortcuts,
   shouldShowShortcutManagement,
 } from "./management";
-import type { AggregateStatus, Configuration, Game } from "../types";
+import type { Configuration, Game } from "../types";
 
 const emptyConfiguration: Configuration = { version: 1, games: {} };
 const managedConfiguration: Configuration = {
@@ -46,23 +45,14 @@ describe("Shortcut management model", () => {
     expect(sections.available.map(({ name }) => name)).toEqual(["Beta", "Zulu"]);
   });
 
-  it.each<AggregateStatus>([
-    "native-ready",
-    "setup-required",
-    "unsupported",
-    "recovery-required",
-  ])("offers restoration but not new enablement when status is %s", (status) => {
+  it("shows management for existing managed shortcuts on non-hypervisor paths", () => {
     expect(shouldShowShortcutManagement({ path: "none" }, managedConfiguration)).toBe(true);
     expect(shouldShowShortcutManagement({ path: "none" }, emptyConfiguration)).toBe(false);
-    expect(canChangeShortcut(status, game({ enabled: true }))).toBe(true);
-    expect(canChangeShortcut(status, game({ enabled: false }))).toBe(false);
   });
 
-  it("offers management for every hypervisor-path state and hides it on a native path without records", () => {
+  it("offers management on the hypervisor path and for existing managed shortcuts", () => {
     expect(shouldShowShortcutManagement({ path: "hypervisor" }, emptyConfiguration)).toBe(true);
     expect(shouldShowShortcutManagement({ path: "native" }, emptyConfiguration)).toBe(false);
-    expect(canChangeShortcut("hypervisor-ready", game({ enabled: false }))).toBe(true);
-    expect(canChangeShortcut("setup-required", game({ enabled: false }))).toBe(false);
   });
 
   it("does not expose management for stale native-app records", () => {

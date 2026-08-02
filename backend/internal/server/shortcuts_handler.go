@@ -30,16 +30,6 @@ func (s *Service) enableGame(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("game name must be between 1 and 256 characters"))
 		return
 	}
-	status, err := s.options.Inspector.Inspect(r.Context(), string(s.options.Controller.State()))
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, err)
-		return
-	}
-
-	if status.Status != model.StatusHypervisorReady {
-		writeError(w, http.StatusConflict, errors.New("per-game management is available only on a hypervisor-ready host"))
-		return
-	}
 	managed, err := s.options.Manager.Enable(appID, request.Name, request.Shortcut, request.CurrentLaunch)
 	if err != nil {
 		s.options.Logger.Error("failed to enable shortcut management", "app_id", appID, "name", request.Name, "error", err)

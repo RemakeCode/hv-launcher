@@ -8,7 +8,7 @@ import {
 } from '@decky/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getConfiguration, getStatus } from '../api';
-import { canChangeShortcut, groupShortcuts, shortcutActionError, shortcutDescription } from './management';
+import { groupShortcuts, shortcutActionError, shortcutDescription } from './management';
 import { logger } from '../shared/logger';
 import { LoadingSpinner } from '../shared/loading-spinner';
 import {
@@ -102,7 +102,7 @@ export function ShortcutManagementPage() {
             label={game.name}
             description={shortcutDescription(game, states[game.appId] ?? 'idle', busy === game.appId)}
             checked={game.enabled}
-            disabled={busy !== undefined || !status || !canChangeShortcut(status.status, game)}
+            disabled={busy !== undefined}
             onChange={(enabled) => void toggle(game, enabled)}
         />
     );
@@ -118,8 +118,7 @@ export function ShortcutManagementPage() {
                             {!status && !error && <LoadingSpinner />}
                             {status && status.status !== 'hypervisor-ready' && (
                                 <DialogLabel>
-                                    New shortcuts cannot be enabled in the current host state. Managed shortcuts can
-                                    still be disabled.
+                                    Readiness affects game launch, not shortcut configuration.
                                 </DialogLabel>
                             )}
                             {libraryMessage && <DialogLabel style={{ marginBottom: 16 }}>{libraryMessage}</DialogLabel>}

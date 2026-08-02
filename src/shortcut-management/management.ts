@@ -23,13 +23,6 @@ export function groupShortcuts(games: Game[]): ShortcutSections {
   };
 }
 
-export function canChangeShortcut(
-  status: SystemStatus["status"],
-  game: Game,
-): boolean {
-  return game.enabled || status === "hypervisor-ready";
-}
-
 export function shortcutDescription(
   game: Game,
   state: DisplayState,
