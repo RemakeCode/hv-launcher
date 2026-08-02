@@ -10,7 +10,7 @@ backend/coverage.out
 .DS_Store
 .idea/
 openspec
-.codex
+.agent
 __pycache__
 docs
 .task
