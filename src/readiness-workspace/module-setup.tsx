@@ -149,8 +149,8 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
           item={{
             title: draft.result.noOp ? 'Module already installed' : 'Module installed',
             detail: draft.result.signaturePresent === false
-              ? 'No generated-module signature metadata was reported; this is informational until a real kernel load is tested.'
-              : `Installed for kernel ${draft.result.kernelRelease}; signature metadata is informational.`,
+              ? 'No generated-module signature metadata was reported'
+              : `Installed for kernel ${draft.result.kernelRelease}`,
             state: 'info'
           }}
         />
@@ -172,7 +172,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
         item={{
           title: 'Module verification',
           detail: verificationState === 'verified'
-            ? 'The running kernel accepted cpuid_fault_emulation during a guarded test.'
+            ? 'The running kernel accepted cpuid_fault_emulation'
             : verificationState === 'failed'
               ? (status.modules.verificationDetail ?? 'The running kernel did not accept cpuid_fault_emulation.')
               : 'Unable to test if module will load on this kernel, you can test manually or run a game',
@@ -188,7 +188,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
             ? 'Installed module does not match the running kernel.'
             : status.modules.signaturePresent
               ? `Signature metadata present${status.modules.signer ? ` (${status.modules.signer})` : ''}; kernel trust is determined by the guarded load test.`
-              : 'No generated kernel-module signature metadata was reported; kernel acceptance is determined by the guarded load test.'}
+              : 'No generated kernel-module signature metadata was reported'}
       />
       {status.modules.verificationDetail && verificationState !== 'failed' && (
         <Field label='Last module-test detail' description={status.modules.verificationDetail} />
