@@ -161,7 +161,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
           icon={FaExclamationTriangle}
           item={{
             title: 'Recovery required',
-            detail: 'Module ownership is ambiguous. Restore KVM manually, then restart the plugin before testing the module.',
+            detail: 'Restore KVM manually, then restart the plugin.',
             state: 'error'
           }}
         />
@@ -196,7 +196,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
       {testError && <ReadinessItem icon={FaExclamationTriangle} item={{ title: 'Module test', detail: testError, state: 'error' }} />}
       <Field
         label='Test module'
-        description={testBlocked ? testUnavailableReason : 'Run the same guarded test used after installation. The host is restored afterward.'}
+        description={testBlocked ? testUnavailableReason : 'Run the guarded post-install test; the host is restored afterward.'}
         inlineWrap='shift-children-below'
       >
         <DialogButton disabled={mutationActive || testing || testBlocked} onClick={() => void runModuleTest()}>
@@ -213,7 +213,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
 
       <Field
         label={draft.archivePath ? 'Choose another source' : 'Install the module'}
-        description='Choose the CPUID module ZIP archive you obtained from the release source. Full validation happens during installation.'
+        description='Choose the CPUID module ZIP archive from the release source.'
         inlineWrap='shift-children-below'
       >
         {!progressVisible && (
@@ -228,7 +228,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
 
       {draft.stage === 'selecting' && (
         <>
-          <Field label='Selecting source archive' description='Choose the ZIP archive you obtained from the release source.' />
+          <Field label='Selecting source archive' description='Choose the ZIP archive from the release source.' />
           <LoadingSpinner />
         </>
       )}
@@ -262,7 +262,7 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
       )}
 
       {draft.archivePath && !progressVisible && draft.stage !== 'complete' && (
-        <Field label='Install reviewed module' description='Validate the archive, prepare dependencies, and build for the running kernel.' inlineWrap='shift-children-below'>
+        <Field label='Install reviewed module' description='Validate, prepare dependencies, and build for the running kernel.' inlineWrap='shift-children-below'>
           <DialogButton disabled={mutationActive || !installAllowed} onClick={confirmInstall}>Install CPUID module</DialogButton>
         </Field>
       )}
@@ -293,7 +293,7 @@ function ModulePreflightDetails({ preflight }: { preflight: ModulePreflight }) {
         </>
       )}
       {preflight.lockdown !== 'none' && preflight.lockdown !== 'unknown' && (
-        <Field label='Kernel lockdown (informational)' description={`${preflight.lockdown}; actual module acceptance is determined by the guarded load test.`} />
+        <Field label='Kernel lockdown (informational)' description={`${preflight.lockdown}; acceptance is determined by the guarded load test.`} />
       )}
     </>
   );
