@@ -7,16 +7,16 @@ import {
   ProgressBarWithInfo,
   showModal
 } from '@decky/ui';
-import type { Dispatch } from 'react';
+import { useState, type Dispatch } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece } from 'react-icons/fa';
-import { installModuleArchive } from '@/api';
+import { installModuleArchive, testModule } from '@/api';
 import { ReadinessItem } from '@/readiness/readiness-item';
-import { issueSetupCapability } from '@/setup-capability';
+import { issueSetupCapability, MODULE_TEST_CAPABILITY_BINDING } from '@/setup-capability';
 import { setupEventStore } from '@/setup-events';
 import { LoadingSpinner } from '@/shared/loading-spinner';
 import { logger } from '@/shared/logger';
 import { readinessError } from '@/shortcut-management/management';
-import type { Check, ModulePreflight } from '@/types';
+import type { Check, ModulePreflight, SystemStatus } from '@/types';
 import { isFilePickerCancellation } from '@/readiness-workspace/readiness-workspace-state';
 import type { ModuleDraft, ModuleDraftAction } from '@/readiness-workspace/readiness-workspace-state';
 
@@ -29,10 +29,14 @@ interface ModuleSetupProps {
   draft: ModuleDraft;
   preflight?: ModulePreflight;
   mutationActive: boolean;
+  status: SystemStatus;
+  onRefresh: () => Promise<void>;
   onDraft: Dispatch<ModuleDraftAction>;
 }
 
-export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }: ModuleSetupProps) {
+export function ModuleSetup({ check, draft, preflight, mutationActive, status, onRefresh, onDraft }: ModuleSetupProps) {
+  const [testing, setTesting] = useState(false);
+  const [testError, setTestError] = useState('');
   const dependencyPlan = preflight?.dependencyPlan;
   const progressVisible = draft.stage === 'installing';
 
@@ -82,6 +86,22 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }
     }
   };
 
+  const runModuleTest = async () => {
+    setTesting(true);
+    setTestError('');
+    try {
+      const capability = await issueSetupCapability('module-test', MODULE_TEST_CAPABILITY_BINDING);
+      const result = await testModule(capability);
+      if (result.error) setTestError(result.error);
+      await onRefresh();
+    } catch (reason) {
+      logger.error('Failed to test the CPUID module', reason);
+      setTestError(readinessError(reason));
+    } finally {
+      setTesting(false);
+    }
+  };
+
   const confirmInstall = () => {
     if (!draft.archivePath || (preflight && preflight.controllerState !== 'idle')) return;
     const dependencyDescription = dependencyPlan
@@ -101,6 +121,23 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }
   const installAllowed = Boolean(draft.archivePath) &&
     (!preflight || preflight.controllerState === 'idle') &&
     (preflight?.ready || Boolean(dependencyPlan));
+  const verificationState = status.modules.verificationState ?? 'pending';
+  const testBlocked = status.modules.controllerState === 'recovery-required' ||
+    status.modules.controllerState !== 'idle' ||
+    status.modules.kvmBusy ||
+    !status.modules.emulationInstalled ||
+    !status.modules.emulationCompatible;
+  const testUnavailableReason = status.modules.controllerState === 'recovery-required'
+    ? 'Testing is disabled until controller recovery is completed.'
+    : status.modules.controllerState !== 'idle'
+      ? 'The hypervisor manager is busy; retry when it returns to idle.'
+      : status.modules.kvmBusy
+        ? 'KVM is busy; stop active virtual machines before testing the module.'
+        : !status.modules.emulationInstalled
+          ? 'Install the CPUID module for the running kernel before testing it.'
+          : !status.modules.emulationCompatible
+            ? 'The installed CPUID module does not match the running kernel.'
+            : '';
 
   return (
     <PanelSection title='CPUID module'>
@@ -108,16 +145,64 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }
 
       {draft.result && (
         <ReadinessItem
-          icon={draft.result.signingRequired ? FaExclamationTriangle : FaCheckCircle}
+          icon={draft.result.signaturePresent === false ? FaExclamationTriangle : FaCheckCircle}
           item={{
             title: draft.result.noOp ? 'Module already installed' : 'Module installed',
-            detail: draft.result.signingRequired
-              ? 'The module matches this kernel, but Secure Boot trust still requires manual signing or MOK enrollment.'
-              : `Verified for kernel ${draft.result.kernelRelease}.`,
-            state: draft.result.signingRequired ? 'error' : 'success'
+            detail: draft.result.signaturePresent === false
+              ? 'No generated-module signature metadata was reported; this is informational until a real kernel load is tested.'
+              : `Installed for kernel ${draft.result.kernelRelease}; signature metadata is informational.`,
+            state: 'info'
           }}
         />
       )}
+
+      {status.modules.controllerState === 'recovery-required' && (
+        <ReadinessItem
+          icon={FaExclamationTriangle}
+          item={{
+            title: 'Recovery required',
+            detail: 'Module ownership is ambiguous. Restore KVM manually, then restart the plugin before testing the module.',
+            state: 'error'
+          }}
+        />
+      )}
+
+      <ReadinessItem
+        icon={verificationState === 'verified' ? FaCheckCircle : FaExclamationTriangle}
+        item={{
+          title: 'Module verification',
+          detail: verificationState === 'verified'
+            ? 'The running kernel accepted cpuid_fault_emulation during a guarded test.'
+            : verificationState === 'failed'
+              ? (status.modules.verificationDetail ?? 'The running kernel did not accept cpuid_fault_emulation.')
+              : 'Unable to test if module will load on this kernel, you can test manually or run a game',
+          state: verificationState === 'verified' ? 'success' : verificationState === 'failed' ? 'error' : 'warning',
+          remedy: status.modules.verificationRemediation
+        }}
+      />
+      <Field
+        label='Installation and signing state'
+        description={!status.modules.emulationInstalled
+          ? 'Not installed for the running kernel.'
+          : !status.modules.emulationCompatible
+            ? 'Installed module does not match the running kernel.'
+            : status.modules.signaturePresent
+              ? `Signature metadata present${status.modules.signer ? ` (${status.modules.signer})` : ''}; kernel trust is determined by the guarded load test.`
+              : 'No generated kernel-module signature metadata was reported; kernel acceptance is determined by the guarded load test.'}
+      />
+      {status.modules.verificationDetail && verificationState !== 'failed' && (
+        <Field label='Last module-test detail' description={status.modules.verificationDetail} />
+      )}
+      {testError && <ReadinessItem icon={FaExclamationTriangle} item={{ title: 'Module test', detail: testError, state: 'error' }} />}
+      <Field
+        label='Test module'
+        description={testBlocked ? testUnavailableReason : 'Run the same guarded test used after installation. The host is restored afterward.'}
+        inlineWrap='shift-children-below'
+      >
+        <DialogButton disabled={mutationActive || testing || testBlocked} onClick={() => void runModuleTest()}>
+          {testing ? 'Testing module…' : 'Test module'}
+        </DialogButton>
+      </Field>
 
       {!preflight?.ready && preflight?.dependencyPlanError && (
         <ReadinessItem
@@ -208,7 +293,7 @@ function ModulePreflightDetails({ preflight }: { preflight: ModulePreflight }) {
         </>
       )}
       {preflight.lockdown !== 'none' && preflight.lockdown !== 'unknown' && (
-        <Field label='Kernel lockdown' description={`${preflight.lockdown}; module signing may require manual MOK enrollment.`} />
+        <Field label='Kernel lockdown (informational)' description={`${preflight.lockdown}; actual module acceptance is determined by the guarded load test.`} />
       )}
     </>
   );

@@ -218,6 +218,58 @@ func TestEnableDisableAndConflict(t *testing.T) {
 	}
 }
 
+func TestEnableIgnoresReadinessStatus(t *testing.T) {
+	service, root, store, _ := newTestService(t)
+	writeServerFile(t, filepath.Join(root, "cpuinfo"), "processor : 0\nvendor_id : Other\ncpu family : 1\nmodel : 1\nmodel name : Unsupported CPU\nflags :\n\n")
+
+	response := perform(service.Handler(), http.MethodPost, "/v1/games/10/enable", `{"name":"Unsupported Host Game","shortcut":true,"currentLaunch":""}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("enable was blocked by readiness status: %d: %s", response.Code, response.Body.String())
+	}
+	if _, exists := store.Game("10"); !exists {
+		t.Fatal("shortcut was not persisted")
+	}
+}
+
+func TestNativeSessionUsesPassthroughMode(t *testing.T) {
+	service, root, _, controller := newTestService(t)
+	writeServerFile(t, filepath.Join(root, "cpuinfo"), "processor : 0\nvendor_id : GenuineIntel\ncpu family : 6\nmodel : 60\nmodel name : Native CPU\nflags : cpuid_fault\n\n")
+	if response := perform(service.Handler(), http.MethodPost, "/v1/games/10/enable", `{"name":"Native Game","shortcut":true,"currentLaunch":""}`); response.Code != http.StatusOK {
+		t.Fatalf("enable returned %d: %s", response.Code, response.Body.String())
+	}
+
+	response := perform(service.Handler(), http.MethodPost, "/v1/sessions", `{"appId":"10"}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("native session returned %d: %s", response.Code, response.Body.String())
+	}
+	var result model.SessionStartResponse
+	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if result.Mode != model.SessionModePassthrough || result.SessionID != "" {
+		t.Fatalf("native session response = %+v", result)
+	}
+	if controller.State() != hypervisor.StateIdle {
+		t.Fatalf("native session changed controller state to %s", controller.State())
+	}
+}
+
+func TestUnsupportedSessionIsRejectedAtRuntime(t *testing.T) {
+	service, root, _, controller := newTestService(t)
+	writeServerFile(t, filepath.Join(root, "cpuinfo"), "processor : 0\nvendor_id : Other\ncpu family : 1\nmodel : 1\nmodel name : Unsupported CPU\nflags :\n\n")
+	if response := perform(service.Handler(), http.MethodPost, "/v1/games/10/enable", `{"name":"Unsupported Game","shortcut":true,"currentLaunch":""}`); response.Code != http.StatusOK {
+		t.Fatalf("enable returned %d: %s", response.Code, response.Body.String())
+	}
+
+	response := perform(service.Handler(), http.MethodPost, "/v1/sessions", `{"appId":"10"}`)
+	if response.Code != http.StatusConflict || !strings.Contains(response.Body.String(), "no supported CPUID execution path") {
+		t.Fatalf("unsupported session response = %d: %s", response.Code, response.Body.String())
+	}
+	if controller.State() != hypervisor.StateIdle {
+		t.Fatalf("unsupported session changed controller state to %s", controller.State())
+	}
+}
+
 func TestEnableRejectsMalformedFrontendMetadata(t *testing.T) {
 	service, _, _, _ := newTestService(t)
 	tests := []string{

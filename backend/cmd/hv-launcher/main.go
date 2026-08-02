@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -98,6 +99,8 @@ func serveBackend() error {
 		return fmt.Errorf("open configuration: %w", err)
 	}
 	logger.Info("configuration ready", "directory", dataDir)
+	verificationStore := cpuidmodule.NewVerificationStore(filepath.Join(dataDir, "cpuid-module-outcome.json"))
+	setupJobs := jobs.NewCoordinator()
 
 	executable, err := os.Executable()
 	if err != nil {
@@ -116,11 +119,13 @@ func serveBackend() error {
 
 	moduleState := hypervisor.SysModuleState{Reader: reader, Root: "/sys/module"}
 	controller, err := hypervisor.New(hypervisor.Options{
-		Runner:        hypervisor.ExecRunner{},
-		Modules:       moduleState,
-		Journal:       journal,
-		KernelRelease: string(bytes.TrimSpace(kernelData)),
-		Logger:        logger,
+		Runner:            hypervisor.ExecRunner{},
+		Modules:           moduleState,
+		Journal:           journal,
+		KernelRelease:     string(bytes.TrimSpace(kernelData)),
+		Logger:            logger,
+		VerificationStore: verificationStore,
+		ActivationFailure: setupJobs.PublishManagedActivationFailure,
 	})
 	if err != nil {
 		return err
@@ -130,18 +135,23 @@ func serveBackend() error {
 		return fmt.Errorf("reconcile prior transition: %w", err)
 	}
 
+	inspector := system.NewInspector(userHome)
+	inspector.VerificationStore = verificationStore
+	installer := cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{})
+	installer.Verifier = controller.TestModule
+
 	svc, err := server.New(server.Options{
 		Config:          store,
-		Inspector:       system.NewInspector(userHome),
+		Inspector:       inspector,
 		Manager:         &shortcuts.Manager{Store: store, WrapperPath: executable},
 		Controller:      controller,
 		Logger:          logger,
 		Proton:          protonWorker,
-		Jobs:            jobs.NewCoordinator(),
+		Jobs:            setupJobs,
 		UMIP:            umip.NewInspector(umip.DefaultPaths()),
 		Capabilities:    capabilities,
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
-		ModuleInstaller: cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{}),
+		ModuleInstaller: installer,
 	})
 	if err != nil {
 		return err

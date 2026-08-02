@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"unicode"
+	"unicode/utf8"
 
 	"hv-launcher/internal/model"
 )
@@ -28,13 +30,21 @@ const (
 var ErrKVMBusy = errors.New("KVM is busy")
 var ErrRecoveryRequired = errors.New("module ownership is ambiguous; recovery is required")
 
+const (
+	maxActivationDiagnostic      = 4 << 10
+	keyRejectedRemediation       = "Sign the generated kernel module and enroll or trust its certificate through your distribution's MOK/key mechanism, then test the module again."
+	genericActivationRemediation = "Retry the module test or managed game; inspect the bounded activation detail if the failure persists."
+)
+
 type Options struct {
-	Runner        CommandRunner
-	Modules       ModuleState
-	Journal       Journal
-	KernelRelease string
-	EffectiveUID  func() int
-	Logger        *slog.Logger
+	Runner            CommandRunner
+	Modules           ModuleState
+	Journal           Journal
+	KernelRelease     string
+	EffectiveUID      func() int
+	Logger            *slog.Logger
+	VerificationStore model.ModuleVerificationStore
+	ActivationFailure func(model.ManagedActivationFailure)
 }
 
 type Controller struct {
@@ -71,6 +81,15 @@ func (c *Controller) Sessions() []model.Session {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.sessionListLocked()
+}
+
+// TestModule performs the fixed, session-free CPUID load transaction used by
+// installation and the readiness UI. A returned outcome is authoritative for
+// the attempted load even when restoration subsequently requires recovery.
+func (c *Controller) TestModule(ctx context.Context) (model.ModuleVerificationOutcome, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.testModuleLocked(ctx)
 }
 
 func (c *Controller) StartSession(ctx context.Context, appID, source string) (model.Session, error) {
@@ -242,23 +261,23 @@ func (c *Controller) Reconcile(ctx context.Context, running map[string]bool) err
 
 func (c *Controller) activateLocked(ctx context.Context, pending model.Session) error {
 	if c.options.EffectiveUID() != 0 {
-		return errors.New("hypervisor transition requires root")
+		return c.blockedActivationLocked(pending.AppID, errors.New("hypervisor transition requires root"))
 	}
 
 	if _, err := c.options.Runner.LookPath("modprobe"); err != nil {
-		return errors.New("modprobe is unavailable")
+		return c.blockedActivationLocked(pending.AppID, errors.New("modprobe is unavailable"))
 	}
 	output, err := c.options.Runner.Run(ctx, "modinfo", "-F", "vermagic", "cpuid_fault_emulation")
 	if err != nil {
-		return fmt.Errorf("cpuid_fault_emulation is not installed: %w", err)
+		return c.blockedActivationLocked(pending.AppID, fmt.Errorf("cpuid_fault_emulation is not installed: %w", err))
 	}
 
 	vermagic := strings.TrimSpace(string(output))
 	if c.options.KernelRelease != "" && vermagic != c.options.KernelRelease && !strings.HasPrefix(vermagic, c.options.KernelRelease+" ") {
-		return fmt.Errorf("cpuid_fault_emulation does not match kernel %s", c.options.KernelRelease)
+		return c.blockedActivationLocked(pending.AppID, fmt.Errorf("cpuid_fault_emulation does not match kernel %s", c.options.KernelRelease))
 	}
 	if c.options.Modules.RefCount("kvm_amd") > 0 {
-		return ErrKVMBusy
+		return c.blockedActivationLocked(pending.AppID, ErrKVMBusy)
 	}
 
 	c.before = c.snapshot()
@@ -273,28 +292,39 @@ func (c *Controller) activateLocked(ctx context.Context, pending model.Session) 
 
 	if c.before.KVMAMD {
 		if err := c.moduleCommand(ctx, false, "kvm_amd"); err != nil {
-			return c.activationFailureLocked(ctx, "remove kvm_amd", err)
+			return c.activationFailureLocked(ctx, "remove kvm_amd", err, pending.AppID)
 		}
 	}
 	if c.before.KVM {
 		if err := c.moduleCommand(ctx, false, "kvm"); err != nil {
-			return c.activationFailureLocked(ctx, "remove kvm", err)
+			return c.activationFailureLocked(ctx, "remove kvm", err, pending.AppID)
 		}
 	}
 	if err := c.moduleCommand(ctx, true, "cpuid_fault_emulation"); err != nil {
-		return c.activationFailureLocked(ctx, "load cpuid_fault_emulation", err)
+		return c.activationFailureLocked(ctx, "load cpuid_fault_emulation", err, pending.AppID)
 	}
+	c.recordVerificationLocked(model.ModuleVerificationOutcome{State: model.ModuleVerificationVerified})
 	c.state = StateEmulationActive
 	c.options.Logger.Info("CPUID fault emulation active", "app_id", pending.AppID)
 	return nil
 }
 
-func (c *Controller) activationFailureLocked(ctx context.Context, step string, cause error) error {
+func (c *Controller) activationFailureLocked(ctx context.Context, step string, cause error, appID string) error {
 	c.options.Logger.Error("activation step failed; rolling back", "step", step, "error", cause)
+	var outcome model.ModuleVerificationOutcome
+	if step == "load cpuid_fault_emulation" {
+		outcome = verificationFailure(cause)
+		c.recordVerificationLocked(outcome)
+	} else {
+		outcome = model.ModuleVerificationOutcome{State: model.ModuleVerificationPending, Classification: model.ModuleVerificationBlocked, Detail: sanitizeActivationText(cause.Error())}
+	}
 	rollbackErr := c.restoreModulesLocked(ctx)
 	if rollbackErr != nil {
 		c.state = StateRecoveryRequired
 		c.options.Logger.Error("activation rollback failed", "step", step, "error", rollbackErr)
+		if appID != "" {
+			c.publishActivationFailureLocked(appID, outcome)
+		}
 		return fmt.Errorf("%s: %w; rollback failed: %v", step, cause, rollbackErr)
 	}
 
@@ -302,10 +332,165 @@ func (c *Controller) activationFailureLocked(ctx context.Context, step string, c
 	c.state = StateIdle
 	if err := c.options.Journal.Clear(); err != nil {
 		c.state = StateRecoveryRequired
+		if appID != "" {
+			c.publishActivationFailureLocked(appID, outcome)
+		}
 		return fmt.Errorf("%s: %w; clearing rollback journal: %v", step, cause, err)
+	}
+	if appID != "" {
+		c.publishActivationFailureLocked(appID, outcome)
 	}
 	c.options.Logger.Info("activation rollback complete", "failed_step", step, "state", c.state)
 	return fmt.Errorf("%s: %w", step, cause)
+}
+
+func (c *Controller) blockedActivationLocked(appID string, cause error) error {
+	outcome := model.ModuleVerificationOutcome{
+		State: model.ModuleVerificationPending, Classification: model.ModuleVerificationBlocked,
+		Detail: sanitizeActivationText(cause.Error()),
+	}
+	c.publishActivationFailureLocked(appID, outcome)
+	return cause
+}
+
+func (c *Controller) testModuleLocked(ctx context.Context) (model.ModuleVerificationOutcome, error) {
+	if c.state == StateRecoveryRequired {
+		return c.blockedModuleTestLocked("Module ownership recovery is required before testing the CPUID module.")
+	}
+	if len(c.sessions) > 0 || c.owned || c.state != StateIdle {
+		return c.blockedModuleTestLocked("The hypervisor manager is busy with a managed game or transition.")
+	}
+	if c.options.Modules.Loaded("cpuid_fault_emulation") {
+		return c.blockedModuleTestLocked("cpuid_fault_emulation is already loaded outside controller ownership.")
+	}
+	if c.options.EffectiveUID() != 0 {
+		return c.blockedModuleTestLocked("Testing the CPUID module requires root.")
+	}
+	if _, err := c.options.Runner.LookPath("modprobe"); err != nil {
+		return c.blockedModuleTestLocked("modprobe is unavailable.")
+	}
+	output, err := c.options.Runner.Run(ctx, "modinfo", "-F", "vermagic", "cpuid_fault_emulation")
+	if err != nil {
+		return c.blockedModuleTestLocked("cpuid_fault_emulation is not installed for the running kernel.")
+	}
+	vermagic := strings.TrimSpace(string(output))
+	if c.options.KernelRelease != "" && vermagic != c.options.KernelRelease && !strings.HasPrefix(vermagic, c.options.KernelRelease+" ") {
+		return c.blockedModuleTestLocked(fmt.Sprintf("cpuid_fault_emulation does not match kernel %s.", c.options.KernelRelease))
+	}
+	if c.options.Modules.RefCount("kvm_amd") > 0 {
+		return c.blockedModuleTestLocked("KVM is busy; stop active virtual machines before testing the module.")
+	}
+
+	c.before = c.snapshot()
+	c.owned = true
+	c.state = StateSwitchingToEmulation
+	if err := c.options.Journal.Write(JournalRecord{Version: 1, Phase: string(c.state), Before: c.before, Owned: true}); err != nil {
+		c.owned = false
+		c.state = StateIdle
+		return c.blockedModuleTestLocked("The module test could not start because its transition journal could not be written.")
+	}
+	if c.before.KVMAMD {
+		if err := c.moduleCommand(ctx, false, "kvm_amd"); err != nil {
+			detail := sanitizeActivationText(err.Error())
+			return c.blockedModuleTestOutcomeLocked(detail), c.activationFailureLocked(ctx, "remove kvm_amd", err, "")
+		}
+	}
+	if c.before.KVM {
+		if err := c.moduleCommand(ctx, false, "kvm"); err != nil {
+			detail := sanitizeActivationText(err.Error())
+			return c.blockedModuleTestOutcomeLocked(detail), c.activationFailureLocked(ctx, "remove kvm", err, "")
+		}
+	}
+
+	if err := c.moduleCommand(ctx, true, "cpuid_fault_emulation"); err != nil {
+		outcome := verificationFailure(err)
+		return outcome, c.activationFailureLocked(ctx, "load cpuid_fault_emulation", err, "")
+	}
+	c.recordVerificationLocked(model.ModuleVerificationOutcome{State: model.ModuleVerificationVerified})
+	if err := c.restoreLocked(ctx); err != nil {
+		return model.ModuleVerificationOutcome{State: model.ModuleVerificationVerified}, err
+	}
+	return model.ModuleVerificationOutcome{State: model.ModuleVerificationVerified}, nil
+}
+
+func (c *Controller) blockedModuleTestLocked(detail string) (model.ModuleVerificationOutcome, error) {
+	outcome := c.blockedModuleTestOutcomeLocked(detail)
+	return outcome, errors.New(outcome.Detail)
+}
+
+func (c *Controller) blockedModuleTestOutcomeLocked(detail string) model.ModuleVerificationOutcome {
+	state := model.ModuleVerificationPending
+	if c.options.VerificationStore != nil {
+		previous, err := c.options.VerificationStore.Load()
+		if err != nil {
+			c.options.Logger.Warn("previous module verification state could not be read for blocked test", "error", err)
+		} else if previous.State == model.ModuleVerificationVerified || previous.State == model.ModuleVerificationFailed {
+			state = previous.State
+		}
+	}
+	return model.ModuleVerificationOutcome{
+		State: state, Classification: model.ModuleVerificationBlocked,
+		Detail: sanitizeActivationText(detail),
+	}
+}
+
+func (c *Controller) recordVerificationLocked(outcome model.ModuleVerificationOutcome) {
+	if c.options.VerificationStore == nil {
+		return
+	}
+	if err := c.options.VerificationStore.SaveIfChanged(outcome); err != nil {
+		c.options.Logger.Warn("module verification result could not be persisted", "error", err)
+	}
+}
+
+func verificationFailure(cause error) model.ModuleVerificationOutcome {
+	detail := sanitizeActivationText(cause.Error())
+	if containsKeyRejection(detail) {
+		return model.ModuleVerificationOutcome{
+			State: model.ModuleVerificationFailed, Classification: model.ModuleVerificationKeyRejected,
+			Detail: detail, Remediation: keyRejectedRemediation,
+		}
+	}
+	return model.ModuleVerificationOutcome{
+		State: model.ModuleVerificationFailed, Classification: model.ModuleVerificationGenericFailure,
+		Detail: detail, Remediation: genericActivationRemediation,
+	}
+}
+
+func containsKeyRejection(value string) bool {
+	lower := strings.ToLower(value)
+	return strings.Contains(lower, strings.ToLower("Required key not available")) || strings.Contains(lower, strings.ToLower("Key was rejected by service"))
+}
+
+func sanitizeActivationText(value string) string {
+	value = strings.Map(func(character rune) rune {
+		if character == '\n' || character == '\r' || character == '\t' || unicode.IsPrint(character) {
+			return character
+		}
+		return -1
+	}, value)
+	value = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(value, "\r", " "), "\n", " "))
+	if len(value) > maxActivationDiagnostic {
+		for len(value) > maxActivationDiagnostic {
+			_, size := utf8.DecodeLastRuneInString(value)
+			value = value[:len(value)-size]
+		}
+	}
+	return value
+}
+
+func (c *Controller) publishActivationFailureLocked(appID string, outcome model.ModuleVerificationOutcome) {
+	if c.options.ActivationFailure == nil || appID == "" {
+		return
+	}
+	summary := "CPUID module activation failed"
+	if outcome.Classification == model.ModuleVerificationKeyRejected {
+		summary = "The kernel rejected the CPUID module signing key"
+	}
+	c.options.ActivationFailure(model.ManagedActivationFailure{
+		AppID: appID, State: outcome.State, Classification: outcome.Classification,
+		Summary: summary, Detail: outcome.Detail, Remediation: outcome.Remediation,
+	})
 }
 
 func (c *Controller) restoreLocked(ctx context.Context) error {
@@ -361,7 +546,11 @@ func (c *Controller) moduleCommand(ctx context.Context, load bool, name string) 
 	c.options.Logger.Info("running module transition", "operation", operation, "module", name)
 	output, err := c.options.Runner.Run(ctx, "modprobe", args...)
 	if err != nil {
-		return fmt.Errorf("modprobe %s: %s: %w", strings.Join(args, " "), strings.TrimSpace(string(output)), err)
+		detail := sanitizeActivationText(string(output))
+		if detail == "" {
+			detail = sanitizeActivationText(err.Error())
+		}
+		return fmt.Errorf("modprobe %s: %s: %w", strings.Join(args, " "), detail, err)
 	}
 
 	if c.options.Modules.Loaded(name) != load {

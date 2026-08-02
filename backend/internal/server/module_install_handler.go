@@ -51,7 +51,7 @@ func (s *Service) installModule(w http.ResponseWriter, r *http.Request) {
 			return nil, installErr
 		}
 
-		s.options.Logger.Info("CPUID module installation complete", "module", result.ModuleName, "kernel", result.KernelRelease, "no_op", result.NoOp, "signing_required", result.SigningRequired)
+		s.options.Logger.Info("CPUID module installation complete", "module", result.ModuleName, "kernel", result.KernelRelease, "no_op", result.NoOp, "signature_present", result.SignaturePresent, "verification_state", result.Verification.State)
 		return result, nil
 	})
 

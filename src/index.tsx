@@ -19,7 +19,7 @@ function setupToastBody(job: SetupJobSnapshot): string {
         : "The UMIP configuration did not complete. Open Readiness setup for recovery details.";
     case "module-install":
       return succeeded
-        ? "The CPUID module installation finished. Reopen Readiness setup to review signing status."
+        ? "The CPUID module installation finished. Reopen Readiness setup to review module verification and signature metadata."
         : "The CPUID module installation did not complete. Open Readiness setup for details.";
     default:
       return succeeded
@@ -38,6 +38,15 @@ export default definePlugin(() => {
       title: succeeded ? "HV Launcher setup complete" : "HV Launcher setup failed",
       body: setupToastBody(job),
       critical: !succeeded,
+      playSound: true,
+      showToast: true,
+    });
+  });
+  setupEventStore.subscribeActivationFailure((failure) => {
+    toaster.toast({
+      title: "CPUID module activation failed",
+      body: failure.detail ? `${failure.summary}: ${failure.detail}` : failure.summary,
+      critical: true,
       playSound: true,
       showToast: true,
     });

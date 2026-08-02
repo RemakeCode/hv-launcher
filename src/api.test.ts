@@ -7,6 +7,7 @@ import {
   getStatus,
   getModulePreflight,
   installModuleArchive,
+  testModule,
   installProtonArchive,
   preflightProtonArchive,
 } from "./api";
@@ -181,6 +182,17 @@ describe("CPUID module setup API", () => {
         path: "/home/deck/Downloads/cpuid_fault_emulation.zip",
         capability: "signed-capability",
       }),
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  it("uses the fixed module-test operation without caller parameters", async () => {
+    const response = { outcome: { state: "verified" } };
+    fetchMock.mockResolvedValue(new Response(JSON.stringify(response)));
+    await expect(testModule("signed-capability")).resolves.toEqual(response);
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/module/test`, {
+      method: "POST",
+      body: JSON.stringify({ capability: "signed-capability" }),
       headers: { "Content-Type": "application/json" },
     });
   });

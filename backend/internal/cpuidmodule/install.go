@@ -9,25 +9,30 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"hv-launcher/internal/model"
 )
 
 type InstallResult struct {
-	Inspection      Inspection `json:"inspection"`
-	Identity        Identity   `json:"identity"`
-	KernelRelease   string     `json:"kernelRelease"`
-	ModuleName      string     `json:"moduleName"`
-	ModulePath      string     `json:"modulePath"`
-	Vermagic        string     `json:"vermagic"`
-	Signer          string     `json:"signer,omitempty"`
-	NoOp            bool       `json:"noOp"`
-	SigningRequired bool       `json:"signingRequired"`
+	Inspection       Inspection                      `json:"inspection"`
+	Identity         Identity                        `json:"identity"`
+	KernelRelease    string                          `json:"kernelRelease"`
+	ModuleName       string                          `json:"moduleName"`
+	ModulePath       string                          `json:"modulePath"`
+	Vermagic         string                          `json:"vermagic"`
+	Signer           string                          `json:"signer,omitempty"`
+	SignaturePresent bool                            `json:"signaturePresent"`
+	NoOp             bool                            `json:"noOp"`
+	SigningRequired  bool                            `json:"signingRequired"`
+	Verification     model.ModuleVerificationOutcome `json:"verification"`
 }
 
 type InstallProgress func(phase string, progress int, output string)
 
 type Installer struct {
-	Paths  PreflightPaths
-	Runner PackageCommandRunner
+	Paths    PreflightPaths
+	Runner   PackageCommandRunner
+	Verifier func(context.Context) (model.ModuleVerificationOutcome, error)
 }
 
 var (
@@ -158,6 +163,10 @@ func (i *Installer) Install(ctx context.Context, selectedPath string, dependency
 	}
 	result.Identity = identity
 	result.Inspection = inspection
+	if i.Verifier != nil {
+		progress("testing-module", 96, "Testing whether the running kernel accepts cpuid_fault_emulation")
+		result.Verification, _ = i.Verifier(ctx)
+	}
 	return result, nil
 }
 
@@ -233,6 +242,7 @@ func (i *Installer) verifyModule(ctx context.Context, release string, identity I
 		Vermagic:      boundedOutput(vermagic),
 		Signer:        boundedOutput(signer),
 	}
+	result.SignaturePresent = result.Signer != ""
 	result.SigningRequired = (lockdown == "integrity" || lockdown == "confidentiality") && result.Signer == ""
 	return true, result
 }

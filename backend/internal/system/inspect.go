@@ -4,34 +4,58 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"hv-launcher/internal/model"
 	"hv-launcher/internal/proton"
 )
 
 type Inspector struct {
-	Reader Reader
-	Runner CommandRunner
-	Paths  Paths
+	Reader            Reader
+	Runner            CommandRunner
+	Paths             Paths
+	VerificationStore model.ModuleVerificationStore
+	Logger            *slog.Logger
 }
 
 func NewInspector(userHome string) *Inspector {
-	return &Inspector{Reader: OSReader{}, Runner: ExecRunner{}, Paths: DefaultPaths(userHome)}
+	return &Inspector{Reader: OSReader{}, Runner: ExecRunner{}, Paths: DefaultPaths(userHome), Logger: slog.Default()}
+}
+
+func (i *Inspector) CompatibilityPath() (model.PathMode, error) {
+	_, _, path, _, err := i.compatibility()
+	return path, err
 }
 
 func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.SystemStatus, error) {
+	cpu, kernel, path, flags, err := i.compatibility()
+	if err != nil {
+		return model.SystemStatus{}, err
+	}
+
+	modules, moduleErr := i.inspectModules(ctx, kernel.Release, controllerState)
+	if moduleErr != nil {
+		return model.SystemStatus{}, moduleErr
+	}
+	proton := i.inspectProton()
+	status := deriveStatus(cpu, kernel, path, modules, proton, flags)
+	return status, nil
+}
+
+func (i *Inspector) compatibility() (model.CPUStatus, model.KernelStatus, model.PathMode, map[string]bool, error) {
 	cpuData, err := i.Reader.ReadFile(i.Paths.CPUInfo)
 	if err != nil {
-		return model.SystemStatus{}, fmt.Errorf("read CPU information: %w", err)
+		return model.CPUStatus{}, model.KernelStatus{}, model.PathNone, nil, fmt.Errorf("read CPU information: %w", err)
 	}
 
 	kernelData, err := i.Reader.ReadFile(i.Paths.KernelRelease)
 	if err != nil {
-		return model.SystemStatus{}, fmt.Errorf("read kernel release: %w", err)
+		return model.CPUStatus{}, model.KernelStatus{}, model.PathNone, nil, fmt.Errorf("read kernel release: %w", err)
 	}
 
 	dmi := strings.Join([]string{
@@ -42,19 +66,15 @@ func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.
 
 	cpu, flags, err := classifyCPU(string(cpuData), dmi)
 	if err != nil {
-		return model.SystemStatus{}, err
+		return model.CPUStatus{}, model.KernelStatus{}, model.PathNone, nil, err
 	}
 
 	kernel, err := classifyKernel(strings.TrimSpace(string(kernelData)))
 	if err != nil {
-		return model.SystemStatus{}, err
+		return model.CPUStatus{}, model.KernelStatus{}, model.PathNone, nil, err
 	}
 
-	path := selectPath(cpu, kernel)
-	modules := i.inspectModules(ctx, strings.TrimSpace(string(kernelData)), controllerState)
-	proton := i.inspectProton()
-	status := deriveStatus(cpu, kernel, path, modules, proton, flags)
-	return status, nil
+	return cpu, kernel, selectPath(cpu, kernel), flags, nil
 }
 
 func classifyCPU(cpuinfo, dmi string) (model.CPUStatus, map[string]bool, error) {
@@ -150,8 +170,21 @@ func selectPath(cpu model.CPUStatus, kernel model.KernelStatus) model.PathMode {
 	return model.PathHypervisor
 }
 
-func (i *Inspector) inspectModules(ctx context.Context, release, controllerState string) model.ModuleStatus {
+func (i *Inspector) inspectModules(ctx context.Context, release, controllerState string) (model.ModuleStatus, error) {
 	status := model.ModuleStatus{ControllerState: controllerState}
+	if i.VerificationStore != nil {
+		outcome, err := i.VerificationStore.Load()
+		if outcome.State != model.ModuleVerificationPending && outcome.State != model.ModuleVerificationVerified && outcome.State != model.ModuleVerificationFailed {
+			outcome = model.ModuleVerificationOutcome{State: model.ModuleVerificationPending}
+		}
+		status.VerificationState = outcome.State
+		status.VerificationClass = outcome.Classification
+		status.VerificationDetail = outcome.Detail
+		status.VerificationRemedy = outcome.Remediation
+		if err != nil && i.Logger != nil {
+			i.Logger.Warn("module verification state could not be read; using pending", "error", err)
+		}
+	}
 	status.EmulationLoaded = moduleLoaded(i.Reader, i.Paths.ModulesRoot, "cpuid_fault_emulation")
 	status.KVMLoaded = moduleLoaded(i.Reader, i.Paths.ModulesRoot, "kvm")
 	status.KVMAMDLoaded = moduleLoaded(i.Reader, i.Paths.ModulesRoot, "kvm_amd")
@@ -160,15 +193,31 @@ func (i *Inspector) inspectModules(ctx context.Context, release, controllerState
 	if i.Runner != nil {
 		output, err := i.Runner.Run(ctx, "modinfo", "-F", "vermagic", "cpuid_fault_emulation")
 		if err == nil {
-			status.EmulationInstalled = true
-			status.EmulationCompatible = strings.HasPrefix(strings.TrimSpace(string(output)), release+" ") || strings.TrimSpace(string(output)) == release
-			if status.Lockdown == "integrity" || status.Lockdown == "confidentiality" {
-				signer, signerErr := i.Runner.Run(ctx, "modinfo", "-F", "signer", "cpuid_fault_emulation")
-				status.SigningRequired = signerErr != nil || strings.TrimSpace(string(signer)) == ""
+			vermagic := strings.TrimSpace(string(output))
+			if vermagic == "" {
+				status.InspectionError = "CPUID module inspection failed: modinfo returned an empty vermagic"
+				return status, errors.New(status.InspectionError)
 			}
+			status.EmulationInstalled = true
+			status.EmulationCompatible = strings.HasPrefix(vermagic, release+" ") || vermagic == release
+			signer, _ := i.Runner.Run(ctx, "modinfo", "-F", "signer", "cpuid_fault_emulation")
+			status.Signer = boundedStatusText(string(signer))
+			status.SignaturePresent = status.Signer != ""
+		} else if !conclusiveModuleMissing(output, err) {
+			status.InspectionError = "CPUID module inspection failed: " + boundedStatusText(err.Error())
+			return status, errors.New(status.InspectionError)
 		}
 	}
-	return status
+	if !status.EmulationInstalled || !status.EmulationCompatible {
+		status.VerificationState = model.ModuleVerificationPending
+		status.VerificationClass = ""
+		status.VerificationDetail = ""
+		status.VerificationRemedy = ""
+		if i.VerificationStore != nil {
+			_ = i.VerificationStore.SaveIfChanged(model.ModuleVerificationOutcome{State: model.ModuleVerificationPending})
+		}
+	}
+	return status, nil
 }
 
 func (i *Inspector) inspectProton() model.ProtonStatus {
@@ -223,8 +272,8 @@ func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.Pat
 		checks = append(checks, model.Check{ID: "cpuid-fault", OK: nativeOK, Label: "Native CPUID faulting", Detail: boolDetail(nativeOK, "advertised by the running kernel", "not advertised by the running kernel"), Remedy: failedRemedy(nativeOK, "Use a kernel that exposes the cpuid_fault CPU flag.")})
 	}
 	if path == model.PathHypervisor {
-		moduleOK := modules.EmulationInstalled && modules.EmulationCompatible && !modules.SigningRequired
-		checks = append(checks, model.Check{ID: "emulation-module", OK: moduleOK, Label: "CPUID module", Detail: moduleDetail(modules), Remedy: failedRemedy(moduleOK, "Install cpuid_fault_emulation through DKMS for the running kernel, then complete any required module signing or MOK enrollment.")})
+		moduleOK := modules.EmulationInstalled && modules.EmulationCompatible && moduleVerificationReady(modules)
+		checks = append(checks, model.Check{ID: "emulation-module", OK: moduleOK, Label: "CPUID module", Detail: moduleDetail(modules), Remedy: moduleRemedy(modules, moduleOK)})
 	}
 	checks = append(checks, model.Check{ID: "proton", OK: proton.Found, Label: "Proton", Detail: protonDetail(proton), Remedy: failedRemedy(proton.Found, "Open Readiness details and setup to install a LinUwUx Proton archive.")})
 
@@ -366,13 +415,75 @@ func moduleDetail(status model.ModuleStatus) string {
 	if !status.EmulationCompatible {
 		return "installed module does not match the running kernel"
 	}
-	if status.SigningRequired {
-		return "installed, but module signing or MOK enrollment is required; check your distribution's documentation for instructions"
+	detail := "installed and compatible"
+	if status.SignaturePresent {
+		detail += "; signature present (signer metadata is informational)"
+	} else {
+		detail += "; no module signature metadata reported"
+	}
+	switch status.VerificationState {
+	case model.ModuleVerificationVerified:
+		return detail + "; kernel acceptance verified"
+	case model.ModuleVerificationFailed:
+		if status.VerificationDetail != "" {
+			return detail + "; kernel rejected module activation: " + status.VerificationDetail
+		}
+		return detail + "; module activation failed"
+	case model.ModuleVerificationPending:
+		if status.VerificationDetail != "" {
+			return detail + "; kernel acceptance pending: " + status.VerificationDetail
+		}
+		return detail + "; kernel acceptance has not been verified"
 	}
 	if status.EmulationLoaded {
-		return "installed, compatible, and loaded"
+		return detail + "; loaded"
 	}
-	return "installed and compatible"
+	return detail
+}
+
+func moduleVerificationReady(status model.ModuleStatus) bool {
+	if status.VerificationState == model.ModuleVerificationVerified {
+		return true
+	}
+	// Preserve the old in-process model contract for callers that do not yet
+	// provide a persistence store. Real inspectors always populate a state.
+	return status.VerificationState == "" && !status.SigningRequired
+}
+
+func moduleRemedy(status model.ModuleStatus, ok bool) string {
+	if ok {
+		return ""
+	}
+	if !status.EmulationInstalled {
+		return "Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it."
+	}
+	if !status.EmulationCompatible {
+		return "Rebuild or install cpuid_fault_emulation through DKMS for the running kernel; the installed module does not match it."
+	}
+	if status.VerificationClass == model.ModuleVerificationKeyRejected {
+		return "Sign the generated kernel module and enroll or trust its certificate through your distribution's MOK/key mechanism, then run Test module again."
+	}
+	if status.VerificationState == model.ModuleVerificationFailed {
+		return "Run Test module again or retry a managed game; inspect the activation detail if the failure persists."
+	}
+	return "Run Test module or a managed game to verify whether the kernel accepts cpuid_fault_emulation."
+}
+
+func conclusiveModuleMissing(output []byte, err error) bool {
+	value := strings.ToLower(strings.TrimSpace(string(output) + " " + err.Error()))
+	return value == "" || strings.Contains(value, "module is absent") || strings.Contains(value, "module missing") || strings.Contains(value, "module not found") || strings.Contains(value, "not found") || strings.Contains(value, "no such file")
+}
+
+func boundedStatusText(value string) string {
+	value = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(value, "\r", " "), "\n", " "))
+	value = strings.ToValidUTF8(value, "\uFFFD")
+	if len(value) > 4<<10 {
+		value = value[:4<<10]
+		for !utf8.ValidString(value) {
+			value = value[:len(value)-1]
+		}
+	}
+	return value
 }
 
 func readLockdown(reader Reader, path string) string {

@@ -34,6 +34,14 @@ export interface SystemStatus {
     emulationInstalled: boolean;
     emulationLoaded: boolean;
     emulationCompatible: boolean;
+    signaturePresent?: boolean;
+    signer?: string;
+    verificationState?: ModuleVerificationState;
+    verificationClassification?: ModuleVerificationClassification;
+    verificationDetail?: string;
+    verificationRemediation?: string;
+    inspectionError?: string;
+    signingRequired?: boolean;
     kvmLoaded: boolean;
     kvmAmdLoaded: boolean;
     kvmBusy: boolean;
@@ -45,6 +53,24 @@ export interface SystemStatus {
     invalid?: Array<{ name: string; detail: string }>;
   };
   checks: Check[];
+}
+
+export type ModuleVerificationState = "pending" | "verified" | "failed";
+export type ModuleVerificationClassification =
+  | "activation-failure"
+  | "signature-key-rejection"
+  | "blocked";
+
+export interface ModuleVerificationOutcome {
+  state: ModuleVerificationState;
+  classification?: ModuleVerificationClassification;
+  detail?: string;
+  remediation?: string;
+}
+
+export interface ModuleTestResponse {
+  outcome: ModuleVerificationOutcome;
+  error?: string;
 }
 
 export interface Game {
@@ -214,8 +240,10 @@ export interface ModuleInstallResult {
   modulePath: string;
   vermagic: string;
   signer?: string;
+  signaturePresent?: boolean;
   noOp: boolean;
   signingRequired: boolean;
+  verification?: ModuleVerificationOutcome;
 }
 
 export interface ActiveSetupJob {
@@ -226,4 +254,18 @@ export interface ActiveSetupJob {
 export interface SetupJobEvent {
   type: "setup-job";
   job: SetupJobSnapshot;
+}
+
+export interface ManagedActivationFailure {
+  appId: string;
+  state: ModuleVerificationState;
+  classification: ModuleVerificationClassification;
+  summary: string;
+  detail?: string;
+  remediation?: string;
+}
+
+export interface ManagedActivationFailureEvent {
+  type: "managed-activation-failure";
+  activationFailure: ManagedActivationFailure;
 }

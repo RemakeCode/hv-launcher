@@ -9,6 +9,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"hv-launcher/internal/model"
 )
 
 const (
@@ -48,8 +50,9 @@ type ActiveJob struct {
 }
 
 type JobEvent struct {
-	Type string      `json:"type"`
-	Job  JobSnapshot `json:"job"`
+	Type              string                          `json:"type"`
+	Job               JobSnapshot                     `json:"job"`
+	ActivationFailure *model.ManagedActivationFailure `json:"activationFailure,omitempty"`
 }
 
 type JobWork func(*Job) (any, error)
@@ -229,6 +232,10 @@ func (c *Coordinator) Subscribe() (<-chan JobEvent, func()) {
 			c.mu.Unlock()
 		})
 	}
+}
+
+func (c *Coordinator) PublishManagedActivationFailure(failure model.ManagedActivationFailure) {
+	c.publish(JobEvent{Type: "managed-activation-failure", ActivationFailure: &failure})
 }
 
 func (c *Coordinator) publish(event JobEvent) {

@@ -99,6 +99,7 @@ func (s *Service) routes() http.Handler {
 		api.Post("/setup/umip", s.applyUMIP)
 		api.Get("/setup/module/preflight", s.inspectModuleRequirements)
 		api.Post("/setup/module/install", s.installModule)
+		api.Post("/setup/module/test", s.testModule)
 		api.Get("/setup/jobs/active", s.activeSetupJob)
 		api.Get("/setup/jobs/{jobID}", s.setupJob)
 		api.Get("/setup/events", s.setupEvents)

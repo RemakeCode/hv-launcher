@@ -31,6 +31,7 @@ type Operation string
 const (
 	OperationUMIPApply     Operation = "umip-apply"
 	OperationModuleInstall Operation = "module-install"
+	OperationModuleTest    Operation = "module-test"
 )
 
 var (
@@ -161,7 +162,7 @@ func validateClaims(parsed claims, now time.Time) error {
 
 func validOperation(operation Operation) bool {
 	switch operation {
-	case OperationUMIPApply, OperationModuleInstall:
+	case OperationUMIPApply, OperationModuleInstall, OperationModuleTest:
 		return true
 	default:
 		return false
