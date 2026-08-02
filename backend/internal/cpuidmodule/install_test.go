@@ -95,23 +95,23 @@ func TestInstallerRejectsExistingRegistrationWithoutReplacingIt(t *testing.T) {
 	}
 }
 
-func TestInstallerRemovesOnlyOwnedRegistrationAfterBuildFailure(t *testing.T) {
-	archivePath := writeModuleZIP(t, validModuleEntries())
-	paths := installerPaths(t)
-	runner := &installRunner{buildError: true}
-	_, err := NewInstaller(paths, runner).Install(context.Background(), archivePath, nil, nil)
-	if err == nil || !runner.called("remove") {
-		t.Fatalf("failed build did not trigger owned cleanup: error=%v calls=%v", err, runner.calls)
+func TestInstallerRemovesOnlyOwnedRegistrationAfterFailure(t *testing.T) {
+	installRunners := []struct {
+		name   string
+		runner *installRunner
+	}{
+		{name: "build", runner: &installRunner{buildError: true}},
+		{name: "install", runner: &installRunner{installError: true}},
 	}
-}
-
-func TestInstallerRemovesOnlyOwnedRegistrationAfterInstallFailure(t *testing.T) {
-	archivePath := writeModuleZIP(t, validModuleEntries())
-	paths := installerPaths(t)
-	runner := &installRunner{installError: true}
-	_, err := NewInstaller(paths, runner).Install(context.Background(), archivePath, nil, nil)
-	if err == nil || !runner.called("remove") {
-		t.Fatalf("failed install did not trigger owned cleanup: error=%v calls=%v", err, runner.calls)
+	for _, test := range installRunners {
+		t.Run(test.name, func(t *testing.T) {
+			archivePath := writeModuleZIP(t, validModuleEntries())
+			paths := installerPaths(t)
+			_, err := NewInstaller(paths, test.runner).Install(context.Background(), archivePath, nil, nil)
+			if err == nil || !test.runner.called("remove") {
+				t.Fatalf("failed %s did not trigger owned cleanup: error=%v calls=%v", test.name, err, test.runner.calls)
+			}
+		})
 	}
 }
 

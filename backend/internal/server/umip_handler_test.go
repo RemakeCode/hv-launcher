@@ -115,74 +115,77 @@ func inspectUMIPEndpoint(t *testing.T, service *Service) umip.Inspection {
 }
 
 func TestUMIPApplyRequiresAndConsumesExactCapability(t *testing.T) {
-	service, _, _, _ := newTestService(t)
-	paths := service.options.UMIP.Paths
-	configuration := "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"\n"
-	writeServerFile(t, paths.GRUBConfiguration, configuration)
-	writeServerFile(t, paths.UpdateGRUB[0], "updater")
-	if err := os.Chmod(paths.UpdateGRUB[0], 0o755); err != nil {
-		t.Fatal(err)
+	tests := []struct {
+		name          string
+		bootloader    umip.Bootloader
+		configuration string
+		want          string
+	}{
+		{
+			name:          "grub",
+			bootloader:    umip.BootloaderGRUB,
+			configuration: "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet\"\n",
+			want:          "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet " + umip.FixedArgument + "\"\n",
+		},
+		{
+			name:          "limine",
+			bootloader:    umip.BootloaderLimine,
+			configuration: "ESP_PATH=\"/boot\"\nKERNEL_CMDLINE[default]+=quiet\n",
+			want:          "ESP_PATH=\"/boot\"\nKERNEL_CMDLINE[default]+=quiet\nKERNEL_CMDLINE[default]+=" + umip.FixedArgument + "\n",
+		},
 	}
-	withoutCapability := `{"bootloader":"grub","capability":""}`
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", withoutCapability)
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("unsigned apply returned %d: %s", response.Code, response.Body.String())
-	}
-	unchanged, _ := os.ReadFile(paths.GRUBConfiguration)
-	if string(unchanged) != configuration {
-		t.Fatalf("unsigned apply changed configuration: %q", unchanged)
-	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			service, _, _, _ := newTestService(t)
+			paths := service.options.UMIP.Paths
+			configurationPath, updater := umipApplyPaths(paths, test.bootloader)
+			writeServerFile(t, configurationPath, test.configuration)
+			writeServerFile(t, updater, "updater")
+			if err := os.Chmod(updater, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			withoutCapability := `{"bootloader":"` + string(test.bootloader) + `","capability":""}`
+			response := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", withoutCapability)
+			if response.Code != http.StatusForbidden {
+				t.Fatalf("unsigned apply returned %d: %s", response.Code, response.Body.String())
+			}
+			unchanged, _ := os.ReadFile(configurationPath)
+			if string(unchanged) != test.configuration {
+				t.Fatalf("unsigned apply changed configuration: %q", unchanged)
+			}
 
-	capability := signServerCapability(t, auth.OperationUMIPApply, umip.UMIPApplyBinding(umip.BootloaderGRUB))
-	request := `{"bootloader":"grub","capability":"` + capability + `"}`
-	response = perform(service.Handler(), http.MethodPost, "/v1/setup/umip", request)
-	if response.Code != http.StatusAccepted {
-		t.Fatalf("authorized apply returned %d: %s", response.Code, response.Body.String())
-	}
-	var started jobs.JobSnapshot
-	if err := json.Unmarshal(response.Body.Bytes(), &started); err != nil {
-		t.Fatal(err)
-	}
-	terminal := waitForServerJob(t, service, started.ID)
-	if terminal.State != jobs.JobSucceeded {
-		t.Fatalf("apply job failed: %+v", terminal)
-	}
-	updated, _ := os.ReadFile(paths.GRUBConfiguration)
-	want := "GRUB_CMDLINE_LINUX_DEFAULT=\"quiet " + umip.FixedArgument + "\"\n"
-	if string(updated) != want {
-		t.Fatalf("authorized apply wrote %q, want %q", updated, want)
-	}
+			capability := signServerCapability(t, auth.OperationUMIPApply, umip.UMIPApplyBinding(test.bootloader))
+			request := `{"bootloader":"` + string(test.bootloader) + `","capability":"` + capability + `"}`
+			response = perform(service.Handler(), http.MethodPost, "/v1/setup/umip", request)
+			if response.Code != http.StatusAccepted {
+				t.Fatalf("authorized apply returned %d: %s", response.Code, response.Body.String())
+			}
+			var started jobs.JobSnapshot
+			if err := json.Unmarshal(response.Body.Bytes(), &started); err != nil {
+				t.Fatal(err)
+			}
+			terminal := waitForServerJob(t, service, started.ID)
+			if terminal.State != jobs.JobSucceeded {
+				t.Fatalf("apply job failed: %+v", terminal)
+			}
+			updated, _ := os.ReadFile(configurationPath)
+			if string(updated) != test.want {
+				t.Fatalf("authorized apply wrote %q, want %q", updated, test.want)
+			}
 
-	replay := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", request)
-	if replay.Code != http.StatusForbidden {
-		t.Fatalf("replayed capability returned %d: %s", replay.Code, replay.Body.String())
+			replay := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", request)
+			if replay.Code != http.StatusForbidden {
+				t.Fatalf("replayed capability returned %d: %s", replay.Code, replay.Body.String())
+			}
+		})
 	}
 }
 
-func TestUMIPApplyEndpointSupportsLimine(t *testing.T) {
-	service, _, _, _ := newTestService(t)
-	paths := service.options.UMIP.Paths
-	configuration := "ESP_PATH=\"/boot\"\nKERNEL_CMDLINE[default]+=quiet\n"
-	writeServerFile(t, paths.LimineConfiguration, configuration)
-	writeServerFile(t, paths.LimineUpdaters[0], "updater")
-	if err := os.Chmod(paths.LimineUpdaters[0], 0o755); err != nil {
-		t.Fatal(err)
+func umipApplyPaths(paths umip.Paths, bootloader umip.Bootloader) (string, string) {
+	if bootloader == umip.BootloaderLimine {
+		return paths.LimineConfiguration, paths.LimineUpdaters[0]
 	}
-	capability := signServerCapability(t, auth.OperationUMIPApply, umip.UMIPApplyBinding(umip.BootloaderLimine))
-	request := `{"bootloader":"limine","capability":"` + capability + `"}`
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", request)
-	terminal := acceptedUMIPJob(t, service, response)
-	if terminal.State != jobs.JobSucceeded {
-		t.Fatalf("Limine apply failed: %+v", terminal)
-	}
-	updated, err := os.ReadFile(paths.LimineConfiguration)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := configuration + "KERNEL_CMDLINE[default]+=" + umip.FixedArgument + "\n"
-	if string(updated) != want {
-		t.Fatalf("Limine apply wrote %q, want %q", updated, want)
-	}
+	return paths.GRUBConfiguration, paths.UpdateGRUB[0]
 }
 
 func TestUMIPApplyEndpointRejectsCallerTargets(t *testing.T) {
@@ -195,10 +198,20 @@ func TestUMIPApplyEndpointRejectsCallerTargets(t *testing.T) {
 		t.Fatal(err)
 	}
 	capability := signServerCapability(t, auth.OperationUMIPApply, umip.UMIPApplyBinding(umip.BootloaderGRUB))
-	withTarget := `{"bootloader":"grub","capability":"` + capability + `","path":"/tmp/evil"}`
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", withTarget)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("apply accepted caller target: %d %s", response.Code, response.Body.String())
+	tests := []struct {
+		name    string
+		request string
+	}{
+		{name: "caller-supplied path", request: `{"bootloader":"grub","capability":"` + capability + `","path":"/tmp/evil"}`},
+		{name: "unsupported bootloader", request: `{"bootloader":"systemd-boot","capability":"invalid"}`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			response := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", test.request)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("apply accepted invalid request: %d %s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 
@@ -314,15 +327,5 @@ func TestUMIPInspectionIncludesCurrentAndProposedConfiguration(t *testing.T) {
 		inspection.Candidates[0].CurrentValue != "quiet splash" ||
 		inspection.Candidates[0].ProposedValue != "quiet splash "+umip.FixedArgument {
 		t.Fatalf("unexpected inspection: %+v", inspection)
-	}
-
-	capability := signServerCapability(t, auth.OperationUMIPApply, umip.UMIPApplyBinding(umip.BootloaderGRUB))
-	unknownField := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", `{"bootloader":"grub","capability":"`+capability+`","path":"/tmp/evil"}`)
-	if unknownField.Code != http.StatusBadRequest {
-		t.Fatalf("apply accepted caller path: %d %s", unknownField.Code, unknownField.Body.String())
-	}
-	unsupported := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", `{"bootloader":"systemd-boot","capability":"invalid"}`)
-	if unsupported.Code != http.StatusBadRequest {
-		t.Fatalf("apply accepted unsupported bootloader: %d %s", unsupported.Code, unsupported.Body.String())
 	}
 }

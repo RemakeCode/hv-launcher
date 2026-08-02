@@ -25,19 +25,22 @@ func TestModulePreflightReturnsHostRequirementsWithoutArchiveInput(t *testing.T)
 	}
 }
 
-func TestModuleInstallRejectsCallerProvidedConfirmation(t *testing.T) {
-	service, _, _, _ := newTestService(t)
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/module/install", `{"path":"/tmp/source.zip","capability":"","confirmedSource":true}`)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("caller-provided confirmation returned %d: %s", response.Code, response.Body.String())
+func TestModuleInstallRejectsCallerProvidedFields(t *testing.T) {
+	requests := []struct {
+		name    string
+		request string
+	}{
+		{name: "confirmation", request: `{"path":"/tmp/source.zip","capability":"","confirmedSource":true}`},
+		{name: "dependency plan", request: `{"path":"/tmp/source.zip","dependencyPlan":{},"capability":""}`},
 	}
-}
-
-func TestModuleInstallRejectsCallerProvidedDependencyPlan(t *testing.T) {
-	service, _, _, _ := newTestService(t)
-	response := perform(service.Handler(), http.MethodPost, "/v1/setup/module/install", `{"path":"/tmp/source.zip","dependencyPlan":{},"capability":""}`)
-	if response.Code != http.StatusBadRequest {
-		t.Fatalf("caller-provided dependency plan returned %d: %s", response.Code, response.Body.String())
+	for _, test := range requests {
+		t.Run(test.name, func(t *testing.T) {
+			service, _, _, _ := newTestService(t)
+			response := perform(service.Handler(), http.MethodPost, "/v1/setup/module/install", test.request)
+			if response.Code != http.StatusBadRequest {
+				t.Fatalf("caller-provided field returned %d: %s", response.Code, response.Body.String())
+			}
+		})
 	}
 }
 

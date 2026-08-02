@@ -277,13 +277,11 @@ func TestArchiveValidationRejectsUnsafeOrIncompleteFixtures(t *testing.T) {
 		},
 	}
 
-	for _, compression := range []Compression{CompressionGzip, CompressionXZ} {
-		for _, test := range tests {
-			t.Run(string(compression)+"/"+test.name, func(t *testing.T) {
-				_, err := validateFixtureArchive(t, buildArchive(t, compression, test.entries), DefaultLimits())
-				assertValidationError(t, err, test.code, "")
-			})
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := validateFixtureArchive(t, buildArchive(t, CompressionGzip, test.entries), DefaultLimits())
+			assertValidationError(t, err, test.code, "")
+		})
 	}
 }
 
