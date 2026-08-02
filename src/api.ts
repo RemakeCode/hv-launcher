@@ -9,6 +9,7 @@ import type {
   UMIPBootloader,
   UMIPInspection,
   ModulePreflight,
+  ModuleTestResponse,
 } from "./types";
 
 export const BASE_URL = "http://127.0.0.1:42991/v1";
@@ -60,6 +61,9 @@ export const installModuleArchive = (path: string, capability: string) =>
     path,
     capability,
   });
+
+export const testModule = (capability: string) =>
+  fetcher.post<ModuleTestResponse>("/setup/module/test", { capability });
 
 export const applyUMIPConfiguration = (
   bootloader: UMIPBootloader,

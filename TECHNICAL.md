@@ -16,7 +16,9 @@ Supported Limine and GRUB configurations can be updated after confirmation. The 
 
 Choose the `cpuid_fault_emulation` ZIP you obtained and review the exact host dependency transaction, if one is available. The module is built for the running kernel through DKMS. If that module and version are already registered, HV Launcher stops without replacing them.
 
-DKMS executes the reviewed `Makefile` as root, so continue only when you trust the source. Secure Boot or kernel lockdown may still require manual signing or MOK enrollment.
+DKMS executes the reviewed `Makefile` as root, so continue only when you trust the source. The ZIP/source provenance warning is separate from the generated kernel module's signature metadata: a signer reported by `modinfo` only means that signature metadata is present, not that the running kernel trusts it. HV Launcher therefore runs a guarded **Test module** operation after installation and keeps that action available in Readiness. Only an actual key-rejection result recommends signing the generated module and enrolling or trusting its certificate through the distribution's MOK/key mechanism. Secure Boot and kernel lockdown are informational; they are not readiness gates.
+
+The last module-load outcome is stored separately from `config.json` and the transition journal as `cpuid-module-outcome.json`. It contains only a version, `pending`/`verified`/`failed` state, and bounded diagnostic/remediation text—never a module hash or kernel-release identity. A saved result is diagnostic and never skips a later guarded load.
 
 Supported mutable package families are CachyOS/Arch, Debian/Ubuntu/Mint, and Fedora/Nobara. Immutable or other distributions receive manual guidance instead of an automatic package transaction.
 

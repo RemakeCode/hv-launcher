@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"hv-launcher/internal/model"
 )
@@ -42,6 +43,17 @@ func itoa(value int) string {
 		value /= 10
 	}
 	return result
+}
+
+func TestBoundedStatusTextPreservesUTF8(t *testing.T) {
+	value := strings.Repeat("a", (4<<10)-1) + "é"
+	result := boundedStatusText(value)
+	if !utf8.ValidString(result) {
+		t.Fatal("bounded status text is not valid UTF-8")
+	}
+	if result != strings.Repeat("a", (4<<10)-1) {
+		t.Fatalf("bounded status text = %q", result)
+	}
 }
 
 func TestCPUClassificationUsesFamilyAndModel(t *testing.T) {
@@ -173,6 +185,48 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 		assertCheckOK(t, status.Checks, "proton")
 	})
 
+	t.Run("pending verification is not ready even when signature metadata is present", func(t *testing.T) {
+		modules := model.ModuleStatus{
+			EmulationInstalled: true, EmulationCompatible: true, SignaturePresent: true,
+			VerificationState: model.ModuleVerificationPending, ControllerState: "idle",
+		}
+		status := deriveStatus(hypervisorCPU, supportedKernel, model.PathHypervisor, modules, linuwux, nil)
+		if status.Status != model.StatusSetupRequired || findCheck(status.Checks, "emulation-module").OK {
+			t.Fatalf("pending module was treated as ready: %+v", status)
+		}
+		if strings.Contains(findCheck(status.Checks, "emulation-module").Remedy, "MOK") {
+			t.Fatal("pending state received signing remediation")
+		}
+	})
+
+	t.Run("verified state is ready regardless of signature metadata", func(t *testing.T) {
+		modules := model.ModuleStatus{
+			EmulationInstalled: true, EmulationCompatible: true, SignaturePresent: false,
+			VerificationState: model.ModuleVerificationVerified, ControllerState: "idle",
+		}
+		status := deriveStatus(hypervisorCPU, supportedKernel, model.PathHypervisor, modules, linuwux, nil)
+		if status.Status != model.StatusHypervisorReady {
+			t.Fatalf("verified module was not ready: %+v", status)
+		}
+	})
+
+	t.Run("key rejection receives signing remediation but generic failures do not", func(t *testing.T) {
+		keyRejected := deriveStatus(hypervisorCPU, supportedKernel, model.PathHypervisor, model.ModuleStatus{
+			EmulationInstalled: true, EmulationCompatible: true, VerificationState: model.ModuleVerificationFailed,
+			VerificationClass: model.ModuleVerificationKeyRejected, VerificationDetail: "Required key not available", ControllerState: "idle",
+		}, linuwux, nil)
+		if !strings.Contains(findCheck(keyRejected.Checks, "emulation-module").Remedy, "MOK") {
+			t.Fatal("key rejection did not receive key enrollment guidance")
+		}
+		generic := deriveStatus(hypervisorCPU, supportedKernel, model.PathHypervisor, model.ModuleStatus{
+			EmulationInstalled: true, EmulationCompatible: true, VerificationState: model.ModuleVerificationFailed,
+			VerificationClass: model.ModuleVerificationGenericFailure, VerificationDetail: "Operation not permitted", ControllerState: "idle",
+		}, linuwux, nil)
+		if strings.Contains(findCheck(generic.Checks, "emulation-module").Remedy, "MOK") {
+			t.Fatal("generic failure received signing guidance")
+		}
+	})
+
 	t.Run("missing Proton requires setup", func(t *testing.T) {
 		cpu := model.CPUStatus{
 			Vendor: "GenuineIntel", Architecture: "intel-gen4", Generation: "Intel 4th generation",
@@ -279,6 +333,15 @@ func assertCheckOK(t *testing.T, checks []model.Check, id string) {
 		}
 	}
 	t.Fatalf("check %s missing", id)
+}
+
+func findCheck(checks []model.Check, id string) model.Check {
+	for _, check := range checks {
+		if check.ID == id {
+			return check
+		}
+	}
+	return model.Check{}
 }
 
 func writeInstalledProtonFixture(t *testing.T, toolsRoot, name string) {

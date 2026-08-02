@@ -1,9 +1,15 @@
 import { BASE_URL, getActiveSetupJob, getSetupJob } from "./api";
 import { logger } from "./shared/logger";
-import type { SetupJobEvent, SetupJobSnapshot } from "./types";
+import type {
+  ManagedActivationFailure,
+  ManagedActivationFailureEvent,
+  SetupJobEvent,
+  SetupJobSnapshot,
+} from "./types";
 
 type SetupListener = (job: SetupJobSnapshot) => void;
 type TerminalListener = (job: SetupJobSnapshot) => void;
+type ActivationFailureListener = (failure: ManagedActivationFailure) => void;
 
 interface EventStream {
   close(): void;
@@ -20,6 +26,7 @@ export class SetupEventStore {
   private terminalListener?: TerminalListener;
   private latestByKind = new Map<string, SetupJobSnapshot>();
   private notified = new Set<string>();
+  private activationFailureListeners = new Set<ActivationFailureListener>();
 
   constructor(
     private readonly createStream: EventStreamFactory = (url) => new EventSource(url),
@@ -38,6 +45,16 @@ export class SetupEventStore {
         logger.error("Failed to read a setup event", reason);
       }
     });
+    source.addEventListener("managed-activation-failure", (event) => {
+      try {
+        const update = JSON.parse(event.data) as ManagedActivationFailureEvent;
+        if (update.type === "managed-activation-failure" && update.activationFailure) {
+          for (const listener of this.activationFailureListeners) listener(update.activationFailure);
+        }
+      } catch (reason) {
+        logger.error("Failed to read a managed activation failure event", reason);
+      }
+    });
     source.onopen = () => void this.reconcile();
     source.onerror = () => logger.warn("Setup event stream disconnected; Decky will reconnect it");
     void this.reconcile();
@@ -50,6 +67,12 @@ export class SetupEventStore {
     this.listeners.clear();
     this.latestByKind.clear();
     this.notified.clear();
+    this.activationFailureListeners.clear();
+  }
+
+  subscribeActivationFailure(listener: ActivationFailureListener): () => void {
+    this.activationFailureListeners.add(listener);
+    return () => this.activationFailureListeners.delete(listener);
   }
 
   subscribe(listener: SetupListener): () => void {

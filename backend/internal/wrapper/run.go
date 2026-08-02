@@ -36,13 +36,16 @@ func (e *APIError) Error() string {
 
 func Run(ctx context.Context, options Options) error {
 	client := &http.Client{Timeout: options.HTTPTimeout}
-	sessionID, err := startSession(ctx, client, options.BaseURL, options.AppID)
+	sessionID, mode, err := startSession(ctx, client, options.BaseURL, options.AppID)
 	if err != nil {
 		var apiErr *APIError
 		if errors.As(err, &apiErr) {
 			return apiErr
 		}
 		// Fail open only when the lifecycle service cannot be reached.
+		return runChild(ctx, options.Command)
+	}
+	if mode == model.SessionModePassthrough {
 		return runChild(ctx, options.Command)
 	}
 
@@ -54,35 +57,44 @@ func Run(ctx context.Context, options Options) error {
 	return endErr
 }
 
-func startSession(ctx context.Context, client *http.Client, baseURL, appID string) (string, error) {
+func startSession(ctx context.Context, client *http.Client, baseURL, appID string) (string, model.SessionMode, error) {
 	body, err := json.Marshal(model.SessionStartRequest{AppID: appID})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/sessions", bytes.NewReader(body))
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
 	response, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer response.Body.Close()
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return "", apiErrorFromResponse(response)
+		return "", "", apiErrorFromResponse(response)
 	}
 
 	var result model.SessionStartResponse
 	if err := json.NewDecoder(response.Body).Decode(&result); err != nil {
-		return "", &APIError{StatusCode: response.StatusCode, Message: "invalid session response: " + err.Error()}
+		return "", "", &APIError{StatusCode: response.StatusCode, Message: "invalid session response: " + err.Error()}
+	}
+	if result.Mode == "" {
+		result.Mode = model.SessionModeHypervisor
+	}
+	if result.Mode != model.SessionModeHypervisor && result.Mode != model.SessionModePassthrough {
+		return "", "", &APIError{StatusCode: response.StatusCode, Message: "invalid session mode: " + string(result.Mode)}
+	}
+	if result.Mode == model.SessionModePassthrough {
+		return "", result.Mode, nil
 	}
 	if result.SessionID == "" {
-		return "", &APIError{StatusCode: response.StatusCode, Message: "service returned an empty session ID"}
+		return "", "", &APIError{StatusCode: response.StatusCode, Message: "service returned an empty session ID"}
 	}
-	return result.SessionID, nil
+	return result.SessionID, result.Mode, nil
 }
 
 func endSession(ctx context.Context, client *http.Client, baseURL, sessionID string) error {

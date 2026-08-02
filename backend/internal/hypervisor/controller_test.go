@@ -16,13 +16,14 @@ import (
 )
 
 type fakeHost struct {
-	mu       sync.Mutex
-	loaded   map[string]bool
-	refCount map[string]int
-	calls    []string
-	failOnce string
-	failed   bool
-	lookErr  error
+	mu         sync.Mutex
+	loaded     map[string]bool
+	refCount   map[string]int
+	calls      []string
+	failOnce   string
+	failOutput string
+	failed     bool
+	lookErr    error
 }
 
 func TestNewSessionIDReturnsRandomSourceFailure(t *testing.T) {
@@ -52,6 +53,9 @@ func (h *fakeHost) Run(_ context.Context, name string, args ...string) ([]byte, 
 	}
 	if h.failOnce == strings.Join(args, " ") && !h.failed {
 		h.failed = true
+		if h.failOutput != "" {
+			return []byte(h.failOutput), errors.New("injected failure")
+		}
 		return []byte("injected failure"), errors.New("injected failure")
 	}
 	if name == "modprobe" {
@@ -65,6 +69,31 @@ func (h *fakeHost) Run(_ context.Context, name string, args ...string) ([]byte, 
 		}
 	}
 	return nil, nil
+}
+
+type memoryOutcomeStore struct {
+	outcome model.ModuleVerificationOutcome
+	writes  int
+	err     error
+}
+
+func (s *memoryOutcomeStore) Load() (model.ModuleVerificationOutcome, error) {
+	if s.outcome.State == "" {
+		return model.ModuleVerificationOutcome{State: model.ModuleVerificationPending}, nil
+	}
+	return s.outcome, nil
+}
+
+func (s *memoryOutcomeStore) SaveIfChanged(outcome model.ModuleVerificationOutcome) error {
+	if s.err != nil {
+		return s.err
+	}
+	if s.outcome == outcome {
+		return nil
+	}
+	s.outcome = outcome
+	s.writes++
+	return nil
 }
 
 func (h *fakeHost) LookPath(string) (string, error) {
@@ -154,6 +183,103 @@ func TestActivationAndFinalSessionRestorationOrdering(t *testing.T) {
 	}
 	if journal.record != nil || controller.State() != StateIdle {
 		t.Fatalf("transition did not finish cleanly: %+v, %s", journal.record, controller.State())
+	}
+}
+
+func TestSessionActivationRecordsVerifiedOutcome(t *testing.T) {
+	host := newFakeHost()
+	store := &memoryOutcomeStore{}
+	controller, err := New(Options{Runner: host, Modules: host, Journal: &memoryJournal{}, KernelRelease: "6.18.0", EffectiveUID: func() int { return 0 }, VerificationStore: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := controller.StartSession(context.Background(), "10", "wrapper"); err != nil {
+		t.Fatal(err)
+	}
+	if store.outcome.State != model.ModuleVerificationVerified {
+		t.Fatalf("activation outcome = %+v", store.outcome)
+	}
+}
+
+func TestModuleTestRestoresExactSnapshotAndRecordsVerification(t *testing.T) {
+	host := newFakeHost()
+	journal := &memoryJournal{}
+	store := &memoryOutcomeStore{}
+	controller, err := New(Options{Runner: host, Modules: host, Journal: journal, KernelRelease: "6.18.0", EffectiveUID: func() int { return 0 }, VerificationStore: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := controller.TestModule(context.Background())
+	if err != nil || outcome.State != model.ModuleVerificationVerified {
+		t.Fatalf("module test = %+v, %v", outcome, err)
+	}
+	if host.snapshot() != (ModuleSnapshot{KVM: true, KVMAMD: true}) || journal.record != nil || controller.State() != StateIdle {
+		t.Fatalf("module test did not restore exact state: modules=%+v journal=%+v controller=%s", host.snapshot(), journal.record, controller.State())
+	}
+	if store.outcome.State != model.ModuleVerificationVerified {
+		t.Fatalf("persisted outcome = %+v", store.outcome)
+	}
+}
+
+func TestModuleTestBlockedByExternalCPUIDPreservesPreviousStateWithoutMutation(t *testing.T) {
+	host := newFakeHost()
+	host.loaded = map[string]bool{"cpuid_fault_emulation": true}
+	journal := &memoryJournal{}
+	store := &memoryOutcomeStore{outcome: model.ModuleVerificationOutcome{State: model.ModuleVerificationFailed}}
+	controller, err := New(Options{Runner: host, Modules: host, Journal: journal, KernelRelease: "6.18.0", EffectiveUID: func() int { return 0 }, VerificationStore: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := controller.TestModule(context.Background())
+	if err == nil || outcome.State != model.ModuleVerificationFailed || outcome.Classification != model.ModuleVerificationBlocked || store.outcome.State != model.ModuleVerificationFailed || store.writes != 0 {
+		t.Fatalf("blocked test = %+v, %v, stored=%+v", outcome, err, store.outcome)
+	}
+	if len(host.calls) != 0 || journal.writes != 0 {
+		t.Fatalf("blocked test mutated the host: calls=%v writes=%d", host.calls, journal.writes)
+	}
+}
+
+func TestModuleTestBlockedWithoutPreviousStateRemainsPending(t *testing.T) {
+	host := newFakeHost()
+	host.loaded = map[string]bool{"cpuid_fault_emulation": true}
+	store := &memoryOutcomeStore{}
+	controller, err := New(Options{Runner: host, Modules: host, Journal: &memoryJournal{}, KernelRelease: "6.18.0", EffectiveUID: func() int { return 0 }, VerificationStore: store})
+	if err != nil {
+		t.Fatal(err)
+	}
+	outcome, err := controller.TestModule(context.Background())
+	if err == nil || outcome.State != model.ModuleVerificationPending || outcome.Classification != model.ModuleVerificationBlocked || store.outcome.State != "" || store.writes != 0 {
+		t.Fatalf("blocked test = %+v, %v, stored=%+v", outcome, err, store.outcome)
+	}
+}
+
+func TestModuleTestClassifiesOnlyKeyRejectionFragments(t *testing.T) {
+	for _, test := range []struct {
+		name           string
+		output         string
+		classification model.ModuleVerificationClassification
+	}{
+		{"required key", "Required key not available", model.ModuleVerificationKeyRejected},
+		{"rejected service", "KEY WAS REJECTED BY SERVICE", model.ModuleVerificationKeyRejected},
+		{"operation not permitted", "Operation not permitted", model.ModuleVerificationGenericFailure},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			host := newFakeHost()
+			host.failOnce = "cpuid_fault_emulation"
+			host.failOutput = test.output
+			store := &memoryOutcomeStore{}
+			controller, err := New(Options{Runner: host, Modules: host, Journal: &memoryJournal{}, KernelRelease: "6.18.0", EffectiveUID: func() int { return 0 }, VerificationStore: store})
+			if err != nil {
+				t.Fatal(err)
+			}
+			outcome, err := controller.TestModule(context.Background())
+			if err == nil || outcome.State != model.ModuleVerificationFailed || outcome.Classification != test.classification {
+				t.Fatalf("outcome = %+v, error=%v", outcome, err)
+			}
+			if strings.Contains(outcome.Remediation, "MOK") != (test.classification == model.ModuleVerificationKeyRejected) {
+				t.Fatalf("unexpected remediation: %+v", outcome)
+			}
+		})
 	}
 }
 

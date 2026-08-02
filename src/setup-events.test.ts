@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { SetupJobSnapshot } from "./types";
+import type { ManagedActivationFailure, SetupJobSnapshot } from "./types";
 
 const { getActiveSetupJob, getSetupJob } = vi.hoisted(() => ({
   getActiveSetupJob: vi.fn(),
@@ -31,6 +31,12 @@ class FakeEventStream {
   emit(job: SetupJobSnapshot) {
     this.listeners.get("setup-job")?.({
       data: JSON.stringify({ type: "setup-job", job }),
+    } as MessageEvent<string>);
+  }
+
+  emitActivationFailure(failure: ManagedActivationFailure) {
+    this.listeners.get("managed-activation-failure")?.({
+      data: JSON.stringify({ type: "managed-activation-failure", activationFailure: failure }),
     } as MessageEvent<string>);
   }
 }
@@ -105,6 +111,25 @@ describe("plugin-lifetime setup events", () => {
     expect(listener).toHaveBeenLastCalledWith(success);
     expect(terminal).toHaveBeenCalledOnce();
     expect(getSetupJob).toHaveBeenLastCalledWith(running.id);
+    store.stop();
+  });
+
+  it("delivers activation failures through the existing stream", () => {
+    const stream = new FakeEventStream();
+    getActiveSetupJob.mockResolvedValue({ active: false });
+    const store = new SetupEventStore(() => stream);
+    const failure = vi.fn();
+    store.subscribeActivationFailure(failure);
+    store.start();
+    const event: ManagedActivationFailure = {
+      appId: "10",
+      state: "failed",
+      classification: "signature-key-rejection",
+      summary: "The kernel rejected the CPUID module signing key",
+      detail: "Required key not available",
+    };
+    stream.emitActivationFailure(event);
+    expect(failure).toHaveBeenCalledWith(event);
     store.stop();
   });
 });

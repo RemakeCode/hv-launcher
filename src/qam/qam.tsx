@@ -30,6 +30,7 @@ import {
 import { getQAMVisualFixture } from '../readiness/visual-fixtures';
 import { logger } from '../shared/logger';
 import { LoadingSpinner } from '../shared/loading-spinner';
+import { setupEventStore } from '../setup-events';
 import type { AggregateStatus, Check, Configuration, SystemStatus } from '../types';
 
 export const MANAGEMENT_ROUTE = '/hv-launcher/manage';
@@ -68,6 +69,9 @@ function statusLabel(status: AggregateStatus): string {
 }
 
 function checkDetail(check: Check, status: SystemStatus): ReactNode {
+  if (status.status === 'recovery-required' && check.id === 'emulation-module') {
+    return 'Module ownership recovery is required before CPUID readiness can be evaluated.';
+  }
   if (check.id !== 'cpu') return check.detail;
 
   return (
@@ -111,6 +115,11 @@ export function ReadinessContent() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(
+    () => setupEventStore.subscribeActivationFailure(() => void refresh()),
+    [refresh]
+  );
 
   if (!status || !configuration) {
     return (
@@ -162,7 +171,7 @@ export function ReadinessContent() {
             title: checkTitles[check.id] ?? check.label,
             detail: checkDetail(check, status),
             state: check.ok ? 'success' : 'error',
-            remedy: !check.ok ? check.remedy : undefined
+            remedy: !check.ok && !managerRecovery ? check.remedy : undefined
           }}
         />
       ))}
@@ -197,6 +206,7 @@ export function ReadinessContent() {
           }}
         />
       )}
+
       {error && (
         <ReadinessItem
           icon={FaExclamationTriangle}

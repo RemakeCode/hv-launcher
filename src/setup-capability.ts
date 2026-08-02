@@ -1,6 +1,8 @@
 import { callable } from "@decky/api";
 
-export type PrivilegedSetupOperation = "umip-apply" | "module-install";
+export type PrivilegedSetupOperation = "umip-apply" | "module-install" | "module-test";
+
+export const MODULE_TEST_CAPABILITY_BINDING = "module-test";
 
 const requestSetupCapability = callable<[PrivilegedSetupOperation, string], string>(
   "issue_setup_capability",

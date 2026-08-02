@@ -85,6 +85,34 @@ func TestSuccessfulSessionWrapsChildAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestPassthroughSessionRunsChildWithoutControllerCleanup(t *testing.T) {
+	output := filepath.Join(t.TempDir(), "ran")
+	var ended bool
+	restore := useTransport(t, func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodPost {
+			return response(http.StatusOK, `{"mode":"passthrough"}`), nil
+		}
+		if r.Method == http.MethodDelete {
+			ended = true
+		}
+		return response(http.StatusNoContent, ""), nil
+	})
+	defer restore()
+
+	if err := Run(context.Background(), Options{
+		AppID: "10", BaseURL: "http://service/v1", HTTPTimeout: time.Second,
+		Command: []string{"/bin/sh", "-c", "printf ran > " + shellQuoteTest(output)},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile(output); err != nil || string(data) != "ran" {
+		t.Fatalf("original command did not run: %q, %v", data, err)
+	}
+	if ended {
+		t.Fatal("passthrough session sent controller cleanup")
+	}
+}
+
 func TestChildExitCodeIsPreserved(t *testing.T) {
 	err := runChild(context.Background(), []string{"/bin/sh", "-c", "exit 23"})
 	type exitCoder interface{ ExitCode() int }

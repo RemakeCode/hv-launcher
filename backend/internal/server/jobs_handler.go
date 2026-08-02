@@ -51,7 +51,7 @@ func (s *Service) setupEvents(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				continue
 			}
-			if _, err := fmt.Fprintf(w, "event: setup-job\ndata: %s\n\n", data); err != nil {
+			if _, err := fmt.Fprintf(w, "event: %s\ndata: %s\n\n", event.Type, data); err != nil {
 				return
 			}
 			flusher.Flush()

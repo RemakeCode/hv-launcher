@@ -10,6 +10,34 @@ const (
 	StatusUnsupported     AggregateStatus = "unsupported"
 )
 
+type ModuleVerificationState string
+
+const (
+	ModuleVerificationPending  ModuleVerificationState = "pending"
+	ModuleVerificationVerified ModuleVerificationState = "verified"
+	ModuleVerificationFailed   ModuleVerificationState = "failed"
+)
+
+type ModuleVerificationClassification string
+
+const (
+	ModuleVerificationGenericFailure ModuleVerificationClassification = "activation-failure"
+	ModuleVerificationKeyRejected    ModuleVerificationClassification = "signature-key-rejection"
+	ModuleVerificationBlocked        ModuleVerificationClassification = "blocked"
+)
+
+type ModuleVerificationOutcome struct {
+	State          ModuleVerificationState          `json:"state"`
+	Classification ModuleVerificationClassification `json:"classification,omitempty"`
+	Detail         string                           `json:"detail,omitempty"`
+	Remediation    string                           `json:"remediation,omitempty"`
+}
+
+type ModuleVerificationStore interface {
+	Load() (ModuleVerificationOutcome, error)
+	SaveIfChanged(ModuleVerificationOutcome) error
+}
+
 type PathMode string
 
 const (
@@ -48,15 +76,36 @@ type KernelStatus struct {
 }
 
 type ModuleStatus struct {
-	EmulationInstalled  bool   `json:"emulationInstalled"`
-	EmulationLoaded     bool   `json:"emulationLoaded"`
-	EmulationCompatible bool   `json:"emulationCompatible"`
-	Lockdown            string `json:"lockdown"`
-	SigningRequired     bool   `json:"signingRequired"`
-	KVMLoaded           bool   `json:"kvmLoaded"`
-	KVMAMDLoaded        bool   `json:"kvmAmdLoaded"`
-	KVMBusy             bool   `json:"kvmBusy"`
-	ControllerState     string `json:"controllerState"`
+	EmulationInstalled  bool                             `json:"emulationInstalled"`
+	EmulationLoaded     bool                             `json:"emulationLoaded"`
+	EmulationCompatible bool                             `json:"emulationCompatible"`
+	SignaturePresent    bool                             `json:"signaturePresent"`
+	Signer              string                           `json:"signer,omitempty"`
+	Lockdown            string                           `json:"lockdown"`
+	VerificationState   ModuleVerificationState          `json:"verificationState"`
+	VerificationClass   ModuleVerificationClassification `json:"verificationClassification,omitempty"`
+	VerificationDetail  string                           `json:"verificationDetail,omitempty"`
+	VerificationRemedy  string                           `json:"verificationRemediation,omitempty"`
+	InspectionError     string                           `json:"inspectionError,omitempty"`
+	SigningRequired     bool                             `json:"signingRequired"`
+	KVMLoaded           bool                             `json:"kvmLoaded"`
+	KVMAMDLoaded        bool                             `json:"kvmAmdLoaded"`
+	KVMBusy             bool                             `json:"kvmBusy"`
+	ControllerState     string                           `json:"controllerState"`
+}
+
+type ModuleTestResponse struct {
+	Outcome ModuleVerificationOutcome `json:"outcome"`
+	Error   string                    `json:"error,omitempty"`
+}
+
+type ManagedActivationFailure struct {
+	AppID          string                           `json:"appId"`
+	State          ModuleVerificationState          `json:"state"`
+	Classification ModuleVerificationClassification `json:"classification"`
+	Summary        string                           `json:"summary"`
+	Detail         string                           `json:"detail,omitempty"`
+	Remediation    string                           `json:"remediation,omitempty"`
 }
 
 type ProtonStatus struct {
@@ -110,8 +159,16 @@ type SessionStartRequest struct {
 	AppID string `json:"appId"`
 }
 
+type SessionMode string
+
+const (
+	SessionModeHypervisor  SessionMode = "hypervisor"
+	SessionModePassthrough SessionMode = "passthrough"
+)
+
 type SessionStartResponse struct {
-	SessionID string `json:"sessionId"`
+	SessionID string      `json:"sessionId"`
+	Mode      SessionMode `json:"mode,omitempty"`
 }
 
 type LifetimeRequest struct {

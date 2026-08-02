@@ -123,6 +123,11 @@ export function ReadinessWorkspace() {
     [refresh]
   );
 
+  useEffect(
+    () => setupEventStore.subscribeActivationFailure(() => void refresh()),
+    [refresh]
+  );
+
   useEffect(() => {
     if (protonDraft.stage !== 'completing') return;
     const timer = window.setTimeout(
@@ -160,12 +165,14 @@ export function ReadinessWorkspace() {
         mutationActive={mutationActive}
         onDraft={dispatchUMIP}
       />
-    ) : check.id === 'emulation-module' && !check.ok && status.modules.controllerState === 'idle' ? (
+    ) : check.id === 'emulation-module' ? (
       <ModuleSetup
         check={check}
         draft={moduleDraft}
         preflight={modulePreflight}
         mutationActive={mutationActive}
+        status={status}
+        onRefresh={refresh}
         onDraft={dispatchModule}
       />
     ) : (

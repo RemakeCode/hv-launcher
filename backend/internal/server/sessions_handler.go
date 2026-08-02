@@ -36,6 +36,20 @@ func (s *Service) startSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	path, err := s.options.Inspector.CompatibilityPath()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err)
+		return
+	}
+	if path == model.PathNone {
+		writeError(w, http.StatusConflict, errors.New("host has no supported CPUID execution path"))
+		return
+	}
+	if path == model.PathNative {
+		writeJSON(w, http.StatusOK, model.SessionStartResponse{Mode: model.SessionModePassthrough})
+		return
+	}
+
 	session, err := s.options.Controller.StartSession(r.Context(), appID, "wrapper")
 	if err != nil {
 		status := http.StatusConflict
@@ -46,7 +60,7 @@ func (s *Service) startSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, status, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, model.SessionStartResponse{SessionID: session.ID})
+	writeJSON(w, http.StatusOK, model.SessionStartResponse{SessionID: session.ID, Mode: model.SessionModeHypervisor})
 }
 
 func (s *Service) endSession(w http.ResponseWriter, r *http.Request) {
