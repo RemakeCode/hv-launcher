@@ -1,3 +1,16 @@
+## [1.2.0](https://github.com/RemakeCode/hv-launcher/compare/v1.1.0...v1.2.0) (2026-08-04)
+
+### 🚀 New Features
+
+* **cpuid:** add trust outcomes and native sessions ([c95d090](https://github.com/RemakeCode/hv-launcher/commit/c95d090f06ca7c656a4101485e83b0b557f5b988))
+
+### 🐛 Bug Fixes
+
+* **backend:** hardened binary startup and shutdown ([67dff28](https://github.com/RemakeCode/hv-launcher/commit/67dff289e6a86ff2b15c4d269fadbd93ab1719e7))
+* reword some descriptions ([2ee2f50](https://github.com/RemakeCode/hv-launcher/commit/2ee2f500d6b5ec4b96cad22d9d6b7f9177942942))
+* reword some descriptions ([8b9a3d9](https://github.com/RemakeCode/hv-launcher/commit/8b9a3d9a4beef79eba85ac1d7445ca94a0d2f3e5))
+* **shortcuts:** decouple management from readiness ([71126e7](https://github.com/RemakeCode/hv-launcher/commit/71126e77ed7048d1c7f8c050cc1c1d61215dc0aa))
+
 ## [1.1.0](https://github.com/RemakeCode/hv-launcher/compare/v1.0.0...v1.1.0) (2026-07-24)
 
 ### 🚀 New Features
