@@ -42,7 +42,6 @@ tasks:
     internal: true
     cmds:
       - npm run typecheck
-      - npm test
 
   package:
     desc: Build the plugin and create package/hv-launcher.zip

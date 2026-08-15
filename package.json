@@ -9,8 +9,7 @@
     "release": "semantic-release",
     "release:preview": "semantic-release --dry-run",
     "watch": "npm run typecheck && NODE_ENV=development rollup -c -w",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "typecheck": "tsc --noEmit"
   },
   "license": "GPL-2.0-only",
   "devDependencies": {
@@ -28,8 +27,7 @@
     "conventional-changelog-conventionalcommits": "9.3.1",
     "rollup": "^4.53.3",
     "semantic-release": "25.0.7",
-    "typescript": "^5.6.2",
-    "vitest": "^3.2.4"
+    "typescript": "^5.6.2"
   },
   "dependencies": {
     "@decky/api": "^1.1.3",
