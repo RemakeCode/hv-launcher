@@ -1,4 +1,4 @@
-import { Fetcher, FetcherError } from "./shared/fetcher";
+import { Fetcher, FetcherError } from '@/shared/fetcher';
 import type {
   Configuration,
   ManageResponse,
@@ -9,7 +9,7 @@ import type {
   UMIPBootloader,
   UMIPInspection,
   ModulePreflight,
-} from "./types";
+} from '@/types';
 
 export const BASE_URL = "http://127.0.0.1:42991/v1";
 export { FetcherError as BackendRequestError };

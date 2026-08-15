@@ -6,7 +6,7 @@ import type {
   SetupJobSnapshot,
   UMIPBootloader,
   UMIPInspection,
-} from "../types";
+} from '@/types';
 
 export type ProtonFlowStage =
   | "idle"

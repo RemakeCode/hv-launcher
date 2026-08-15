@@ -12,12 +12,13 @@ import { FaCheckCircle, FaExclamationTriangle, FaShieldAlt } from 'react-icons/f
 import { applyUMIPConfiguration } from '@/api';
 import { ReadinessItem } from '@/readiness/readiness-item';
 import { issueSetupCapability } from '@/setup-capability';
-import { setupEventStore } from '../setup-events';
-import { LoadingSpinner } from '../shared/loading-spinner';
-import { logger } from '../shared/logger';
-import { readinessError } from '../shortcut-management/management';
-import type { Check, UMIPBootloader, UMIPCandidate } from '../types';
-import type { UMIPDraft, UMIPDraftAction } from './readiness-workspace-state';
+import { setupEventStore } from '@/setup-events';
+import { UMIPCandidateDetails } from '@/readiness-workspace/umip-candidate-details';
+import { LoadingSpinner } from '@/shared/loading-spinner';
+import { logger } from '@/shared/logger';
+import { readinessError } from '@/shortcut-management/management';
+import type { Check, UMIPBootloader } from '@/types';
+import type { UMIPDraft, UMIPDraftAction } from '@/readiness-workspace/readiness-workspace-state';
 
 const SETUP_INTERRUPTION_WARNING =
   'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until the boot configuration update finishes.';
@@ -143,7 +144,7 @@ export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupPr
         />
       )}
 
-      {candidate && <CandidateDetails candidate={candidate} />}
+      {candidate && <UMIPCandidateDetails candidate={candidate} />}
 
       {candidate?.state === 'action-required' && (
         <>
@@ -199,18 +200,6 @@ export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupPr
         </Field>
       )}
     </PanelSection>
-  );
-}
-
-function CandidateDetails({ candidate }: { candidate: UMIPCandidate }) {
-  return (
-    <>
-      <Field label='Bootloader' description={bootloaderLabel(candidate.bootloader)} />
-      <Field label='Configuration file' description={candidate.configuration} />
-      {candidate.state === 'restart-required' && (
-        <Field label='Configured argument' description={candidate.existingArgument} />
-      )}
-    </>
   );
 }
 

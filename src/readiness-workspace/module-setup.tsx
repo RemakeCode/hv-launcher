@@ -8,8 +8,9 @@ import {
   showModal
 } from '@decky/ui';
 import type { Dispatch } from 'react';
-import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece } from 'react-icons/fa';
+import { FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
 import { installModuleArchive } from '@/api';
+import { ModulePreflightDetails } from '@/readiness-workspace/module-preflight-details';
 import { ReadinessItem } from '@/readiness/readiness-item';
 import { issueSetupCapability } from '@/setup-capability';
 import { setupEventStore } from '@/setup-events';
@@ -182,35 +183,6 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, onDraft }
         </Field>
       )}
     </PanelSection>
-  );
-}
-
-function ModulePreflightDetails({ preflight }: { preflight: ModulePreflight }) {
-  return (
-    <>
-      <ReadinessItem
-        icon={preflight.ready ? FaCheckCircle : FaPuzzlePiece}
-        item={{
-          title: preflight.ready ? 'Host requirements ready' : 'Host requirements need attention',
-          detail: `${preflight.distributionId ?? 'Unknown distribution'} · kernel ${preflight.kernelRelease || 'unknown'}`,
-          state: preflight.ready ? 'success' : 'info'
-        }}
-      />
-      {preflight.dependencyPlan && (
-        <>
-          <Field
-            label='Reviewed dependency transaction'
-            description={`${preflight.dependencyPlan.manager}: ${preflight.dependencyPlan.packages.join(', ')}`}
-          />
-          {preflight.dependencyPlan.previewOutput && (
-            <Field label='Package manager preview' description={preflight.dependencyPlan.previewOutput} />
-          )}
-        </>
-      )}
-      {preflight.lockdown !== 'none' && preflight.lockdown !== 'unknown' && (
-        <Field label='Kernel lockdown' description={`${preflight.lockdown}; module signing may require manual MOK enrollment.`} />
-      )}
-    </>
   );
 }
 

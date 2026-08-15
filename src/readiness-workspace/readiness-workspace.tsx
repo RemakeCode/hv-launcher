@@ -2,23 +2,23 @@ import { Field, PanelSection, SidebarNavigation } from '@decky/ui';
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece, FaShieldAlt, FaWineBottle } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
-import { getModulePreflight, getStatus, getUMIPInspection } from '../api';
-import { READINESS_ROUTE } from '../qam/qam';
-import { ReadinessItem, readinessColor } from '../readiness/readiness-item';
+import { getModulePreflight, getStatus, getUMIPInspection } from '@/api';
+import { READINESS_ROUTE } from '@/qam/qam';
+import { ReadinessItem, readinessColor } from '@/readiness/readiness-item';
 import {
   getQAMVisualFixture,
   getReadinessWorkspaceModuleFixture,
   getReadinessWorkspaceProtonFixture,
   getReadinessWorkspaceUMIPFixture
-} from '../readiness/visual-fixtures';
-import { LoadingSpinner } from '../shared/loading-spinner';
-import { logger } from '../shared/logger';
-import { readinessError } from '../shortcut-management/management';
-import { setupEventStore } from '../setup-events';
-import type { Check, ModulePreflight, SystemStatus } from '../types';
-import { ProtonSetup } from './proton-setup';
-import { ModuleSetup } from './module-setup';
-import { UMIPSetup } from './umip-setup';
+} from '@/readiness/visual-fixtures';
+import { LoadingSpinner } from '@/shared/loading-spinner';
+import { logger } from '@/shared/logger';
+import { readinessError } from '@/shortcut-management/management';
+import { setupEventStore } from '@/setup-events';
+import type { Check, ModulePreflight, SystemStatus } from '@/types';
+import { ProtonSetup } from '@/readiness-workspace/proton-setup';
+import { ModuleSetup } from '@/readiness-workspace/module-setup';
+import { UMIPSetup } from '@/readiness-workspace/umip-setup';
 import {
   emptyUMIPDraft,
   emptyProtonDraft,
@@ -30,7 +30,7 @@ import {
   readinessWorkspaceChecks,
   umipDraftReducer,
   moduleDraftReducer
-} from './readiness-workspace-state';
+} from '@/readiness-workspace/readiness-workspace-state';
 
 const workspaceIcons: Record<string, IconType> = {
   umip: FaShieldAlt,
@@ -44,6 +44,18 @@ const workspaceTitles: Record<string, string> = {
 };
 
 const PROTON_COMPLETION_HOLD_MS = 2_000;
+
+const readinessWorkspaceStyles = `
+  .hv-readiness-workspace-loading {
+    padding: 16px;
+  }
+
+  .hv-readiness-workspace-page-title {
+    align-items: center;
+    display: flex;
+    gap: 8px;
+  }
+`;
 
 export function ReadinessWorkspace() {
   const [status, setStatus] = useState<SystemStatus>();
@@ -138,7 +150,8 @@ export function ReadinessWorkspace() {
   if (!status) {
     return (
       <PanelSection title='System readiness'>
-        <div style={{ padding: 16 }}>{error || <LoadingSpinner />}</div>
+        <style>{readinessWorkspaceStyles}</style>
+        <div className='hv-readiness-workspace-loading'>{error || <LoadingSpinner />}</div>
       </PanelSection>
     );
   }
@@ -176,7 +189,7 @@ export function ReadinessWorkspace() {
       route: READINESS_ROUTE,
       link: readinessPageLink(READINESS_ROUTE, check.id),
       title: (
-        <div style={{ alignItems: 'center', display: 'flex', gap: 8 }}>
+        <div className='hv-readiness-workspace-page-title'>
           {check.ok ? (
             <FaCheckCircle style={{ color: readinessColor('success') }} />
           ) : (
@@ -191,16 +204,19 @@ export function ReadinessWorkspace() {
   });
 
   return (
-    <SidebarNavigation
-      title='System readiness'
-      pages={pages}
-      page={readinessPageLink(READINESS_ROUTE, selected)}
-      onPageRequested={(page) => {
-        const requested = readinessSelectionFromPage(page, READINESS_ROUTE, checks);
-        if (requested) setSelected(requested);
-      }}
-      showTitle
-    />
+    <>
+      <style>{readinessWorkspaceStyles}</style>
+      <SidebarNavigation
+        title='System readiness'
+        pages={pages}
+        page={readinessPageLink(READINESS_ROUTE, selected)}
+        onPageRequested={(page) => {
+          const requested = readinessSelectionFromPage(page, READINESS_ROUTE, checks);
+          if (requested) setSelected(requested);
+        }}
+        showTitle
+      />
+    </>
   );
 }
 

@@ -7,10 +7,10 @@ import {
     ToggleField
 } from '@decky/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getConfiguration, getStatus } from '../api';
-import { canChangeShortcut, groupShortcuts, shortcutActionError, shortcutDescription } from './management';
-import { logger } from '../shared/logger';
-import { LoadingSpinner } from '../shared/loading-spinner';
+import { getConfiguration, getStatus } from '@/api';
+import { canChangeShortcut, groupShortcuts, shortcutActionError, shortcutDescription } from '@/shortcut-management/management';
+import { logger } from '@/shared/logger';
+import { LoadingSpinner } from '@/shared/loading-spinner';
 import {
     disableManagedGame,
     discoverGames,
@@ -18,11 +18,26 @@ import {
     enableManagedGame,
     observeSteamOverviews,
     SteamLibraryLoadingError
-} from '../steam';
-import type { Configuration, DisplayState, Game, SystemStatus } from '../types';
+} from '@/steam';
+import type { Configuration, DisplayState, Game, SystemStatus } from '@/types';
 import { GiGamepad } from 'react-icons/gi';
 
 const EMPTY_CONFIGURATION: Configuration = { version: 1, games: {} };
+
+const shortcutManagementStyles = `
+  .hv-shortcut-error {
+    color: #ffb4a9;
+    margin-block: 8px;
+  }
+
+  .hv-shortcut-library-message {
+    margin-bottom: 16px;
+  }
+
+  .hv-shortcut-empty {
+    margin-block-start: 8px;
+  }
+`;
 
 export function ShortcutManagementPage() {
     const [status, setStatus] = useState<SystemStatus>();
@@ -115,6 +130,7 @@ export function ShortcutManagementPage() {
                     icon: <GiGamepad />,
                     content: (
                         <DialogBody>
+                            <style>{shortcutManagementStyles}</style>
                             {!status && !error && <LoadingSpinner />}
                             {status && status.status !== 'hypervisor-ready' && (
                                 <DialogLabel>
@@ -122,17 +138,17 @@ export function ShortcutManagementPage() {
                                     still be disabled.
                                 </DialogLabel>
                             )}
-                            {libraryMessage && <DialogLabel style={{ marginBottom: 16 }}>{libraryMessage}</DialogLabel>}
+                            {libraryMessage && <DialogLabel className='hv-shortcut-library-message'>{libraryMessage}</DialogLabel>}
 
                             <DialogControlsSection>
                                 {error && (
-                                    <DialogLabel style={{ color: '#ffb4a9', marginBlock: '8px' }}>{error}</DialogLabel>
+                                    <DialogLabel className='hv-shortcut-error'>{error}</DialogLabel>
                                 )}
                                 <DialogControlsSectionHeader>Managed shortcuts</DialogControlsSectionHeader>
                                 {sections.managed.length > 0 ? (
                                     sections.managed.map(row)
                                 ) : (
-                                    <DialogLabel style={{ marginBlockStart: '8px' }}>No managed shortcuts.</DialogLabel>
+                                    <DialogLabel className='hv-shortcut-empty'>No managed shortcuts.</DialogLabel>
                                 )}
                             </DialogControlsSection>
 

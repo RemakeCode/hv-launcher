@@ -10,18 +10,18 @@ import {
 } from '@decky/ui';
 import type { Dispatch } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaWineBottle } from 'react-icons/fa';
-import { installProtonArchive, preflightProtonArchive } from '../api';
-import { ReadinessItem } from '../readiness/readiness-item';
-import { readinessError } from '../shortcut-management/management';
-import { setupEventStore } from '../setup-events';
-import { LoadingSpinner } from '../shared/loading-spinner';
-import { logger } from '../shared/logger';
+import { installProtonArchive, preflightProtonArchive } from '@/api';
+import { ReadinessItem } from '@/readiness/readiness-item';
+import { readinessError } from '@/shortcut-management/management';
+import { setupEventStore } from '@/setup-events';
+import { LoadingSpinner } from '@/shared/loading-spinner';
+import { logger } from '@/shared/logger';
 import {
     isFilePickerCancellation,
     isSupportedProtonArchive,
     type ProtonDraft,
     type ProtonDraftAction
-} from './readiness-workspace-state';
+} from '@/readiness-workspace/readiness-workspace-state';
 
 const PROTON_PICKER_START_PATH = '/home';
 const SETUP_INTERRUPTION_WARNING =

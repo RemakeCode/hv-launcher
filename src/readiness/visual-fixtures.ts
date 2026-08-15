@@ -1,4 +1,4 @@
-import type { ModuleDraft, ProtonDraft, UMIPDraft } from '../readiness-workspace/readiness-workspace-state';
+import type { ModuleDraft, ProtonDraft, UMIPDraft } from '@/readiness-workspace/readiness-workspace-state';
 import type {
   AggregateStatus,
   Check,
@@ -12,7 +12,7 @@ import type {
   SystemStatus,
   UMIPCandidate,
   UMIPInspection
-} from '../types';
+} from '@/types';
 
 type ProtonWorkspaceFixtureName = 'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
 type UMIPWorkspaceFixtureName =
