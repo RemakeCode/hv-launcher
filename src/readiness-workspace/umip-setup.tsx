@@ -12,21 +12,45 @@ import { FaCheckCircle, FaExclamationTriangle, FaShieldAlt } from 'react-icons/f
 import { applyUMIPConfiguration } from '@/api';
 import { ReadinessItem } from '@/readiness/readiness-item';
 import { issueSetupCapability } from '@/setup-capability';
-import { setupEventStore } from '../setup-events';
-import { LoadingSpinner } from '../shared/loading-spinner';
-import { logger } from '../shared/logger';
-import { readinessError } from '../shortcut-management/management';
-import type { Check, UMIPBootloader, UMIPCandidate } from '../types';
-import type { UMIPDraft, UMIPDraftAction } from './readiness-workspace-state';
-
-const SETUP_INTERRUPTION_WARNING =
-  'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until the boot configuration update finishes.';
+import { setupEventStore } from '@/setup-events';
+import { LoadingSpinner } from '@/shared/loading-spinner';
+import { logger } from '@/shared/logger';
+import { readinessError } from '@/shortcut-management/management';
+import type { Check, UMIPBootloader, UMIPCandidate } from '@/types';
+import type { UMIPDraft, UMIPDraftAction } from '@/readiness-workspace/readiness-workspace-state';
 
 interface UMIPSetupProps {
   check: Check;
   draft: UMIPDraft;
   mutationActive: boolean;
   onDraft: Dispatch<UMIPDraftAction>;
+}
+
+const SETUP_INTERRUPTION_WARNING =
+  'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until the boot configuration update finishes.';
+
+function CandidateDetails({ candidate }: { candidate: UMIPCandidate }) {
+  return (
+    <>
+      <Field label='Bootloader' description={bootloaderLabel(candidate.bootloader)} />
+      <Field label='Configuration file' description={candidate.configuration} />
+      {candidate.state === 'restart-required' && (
+        <Field label='Configured argument' description={candidate.existingArgument} />
+      )}
+    </>
+  );
+}
+
+function bootloaderLabel(bootloader: UMIPBootloader): string {
+  return bootloader === 'grub' ? 'GRUB' : 'Limine';
+}
+
+function formatUpdater(path: string, args: string[]): string {
+  return [path, ...args].join(' ');
+}
+
+function humanize(value: string): string {
+  return value.replaceAll('-', ' ');
 }
 
 export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupProps) {
@@ -200,28 +224,4 @@ export function UMIPSetup({ check, draft, mutationActive, onDraft }: UMIPSetupPr
       )}
     </PanelSection>
   );
-}
-
-function CandidateDetails({ candidate }: { candidate: UMIPCandidate }) {
-  return (
-    <>
-      <Field label='Bootloader' description={bootloaderLabel(candidate.bootloader)} />
-      <Field label='Configuration file' description={candidate.configuration} />
-      {candidate.state === 'restart-required' && (
-        <Field label='Configured argument' description={candidate.existingArgument} />
-      )}
-    </>
-  );
-}
-
-function bootloaderLabel(bootloader: UMIPBootloader): string {
-  return bootloader === 'grub' ? 'GRUB' : 'Limine';
-}
-
-function formatUpdater(path: string, args: string[]): string {
-  return [path, ...args].join(' ');
-}
-
-function humanize(value: string): string {
-  return value.replaceAll('-', ' ');
 }

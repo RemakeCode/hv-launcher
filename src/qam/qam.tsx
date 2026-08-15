@@ -17,8 +17,8 @@ import {
   FaTimesCircle,
   FaWineBottle
 } from 'react-icons/fa';
-import { getConfiguration, getStatus } from '../api';
-import { readinessError, shouldShowShortcutManagement } from '../shortcut-management/management';
+import { getConfiguration, getStatus } from '@/api';
+import { readinessError, shouldShowShortcutManagement } from '@/shortcut-management/management';
 import {
   aggregateReadinessState,
   kvmReadinessState,
@@ -26,12 +26,12 @@ import {
   pathReadinessState,
   ReadinessItem,
   readinessColor
-} from '../readiness/readiness-item';
-import { getQAMVisualFixture } from '../readiness/visual-fixtures';
-import { logger } from '../shared/logger';
-import { LoadingSpinner } from '../shared/loading-spinner';
-import { setupEventStore } from '../setup-events';
-import type { AggregateStatus, Check, Configuration, SystemStatus } from '../types';
+} from '@/readiness/readiness-item';
+import { getQAMVisualFixture } from '@/readiness/visual-fixtures';
+import { logger } from '@/shared/logger';
+import { LoadingSpinner } from '@/shared/loading-spinner';
+import { setupEventStore } from '@/setup-events';
+import type { AggregateStatus, Check, Configuration, SystemStatus } from '@/types';
 
 export const MANAGEMENT_ROUTE = '/hv-launcher/manage';
 export const READINESS_ROUTE = '/hv-launcher/readiness';
@@ -42,12 +42,12 @@ const checkIcons: Record<string, IconType> = {
   umip: FaShieldAlt,
   'cpuid-fault': FaFingerprint,
   'emulation-module': FaPuzzlePiece,
-  proton: FaWineBottle
+  linuwux: FaWineBottle
 };
 
 const checkTitles: Record<string, string> = {
   'emulation-module': 'CPUID module',
-  proton: 'Proton'
+  linuwux: 'LinUwUx integration'
 };
 
 const aggregateIcons: Record<AggregateStatus, IconType> = {
@@ -57,6 +57,28 @@ const aggregateIcons: Record<AggregateStatus, IconType> = {
   'recovery-required': FaExclamationTriangle,
   unsupported: FaTimesCircle
 };
+
+const qamStyles = `
+  .hv-qam-cpu-detail {
+    margin-top: 2px;
+  }
+
+  .hv-qam-loading {
+    padding: 10px 0;
+  }
+
+  .hv-qam-status-summary {
+    align-items: center;
+    display: flex;
+    gap: 9px;
+    padding-bottom: 6px;
+  }
+
+  .hv-qam-status-icon {
+    flex-shrink: 0;
+    font-size: 19px;
+  }
+`;
 
 function statusLabel(status: AggregateStatus): string {
   return {
@@ -72,6 +94,18 @@ function checkDetail(check: Check, status: SystemStatus): ReactNode {
   if (status.status === 'recovery-required' && check.id === 'emulation-module') {
     return 'Module ownership recovery is required before CPUID readiness can be evaluated.';
   }
+  if (check.id === 'linuwux') {
+    const protonBuilds = status.linuwux.proton.tools.length;
+    const runtimeAvailable = status.linuwux.runtime.available;
+    if (protonBuilds > 0 || runtimeAvailable) {
+      return (
+        <>
+          {protonBuilds > 0 && <div>{protonBuildSummary(protonBuilds)}</div>}
+          {runtimeAvailable && <div>LinUwUx runtime installed</div>}
+        </>
+      );
+    }
+  }
   if (check.id !== 'cpu') return check.detail;
 
   return (
@@ -79,13 +113,20 @@ function checkDetail(check: Check, status: SystemStatus): ReactNode {
       <Marquee play fadeLength={12}>
         {status.cpu.modelName || status.cpu.vendor}
       </Marquee>
-      <div style={{ marginTop: 2 }}>{check.detail}</div>
+      <div className='hv-qam-cpu-detail'>{check.detail}</div>
     </>
   );
 }
 
 function humanizeState(state: string): string {
   return state.replaceAll('-', ' ');
+}
+
+const protonBuildPluralRules = new Intl.PluralRules();
+
+function protonBuildSummary(count: number): string {
+  const noun = protonBuildPluralRules.select(count) === 'one' ? 'build' : 'builds';
+  return `${count} LinUwUx Proton ${noun} found`;
 }
 
 export function ReadinessContent() {
@@ -124,7 +165,8 @@ export function ReadinessContent() {
   if (!status || !configuration) {
     return (
       <PanelSection title="System readiness">
-        <div style={{ padding: '10px 0' }}>{error || <LoadingSpinner />}</div>
+        <style>{qamStyles}</style>
+        <div className='hv-qam-loading'>{error || <LoadingSpinner />}</div>
         {error && (
           <ButtonItem layout="below" disabled={refreshing} onClick={() => void refresh()}>
             {refreshing ? 'Retrying…' : 'Retry'}
@@ -153,10 +195,12 @@ export function ReadinessContent() {
 
   return (
     <PanelSection title="Readiness check">
-      <div style={{ alignItems: 'center', display: 'flex', gap: 9, paddingBottom: 6 }}>
+      <style>{qamStyles}</style>
+      <div className='hv-qam-status-summary'>
         <AggregateIcon
           aria-hidden
-          style={{ color: readinessColor(aggregateState), flexShrink: 0, fontSize: 19 }}
+          className='hv-qam-status-icon'
+          style={{ color: readinessColor(aggregateState) }}
         />
         <DialogLabel style={{ color: readinessColor(aggregateState) }}>
           {statusLabel(status.status)}

@@ -92,7 +92,10 @@ func (c *Coordinator) Start(kind, phase string, work JobWork) (JobSnapshot, erro
 	}
 
 	id := base64.RawURLEncoding.EncodeToString(idBytes)
-	snapshot := &JobSnapshot{ID: id, Kind: kind, State: JobRunning, Phase: phase, Progress: 0, StartedAt: c.now()}
+	snapshot := &JobSnapshot{
+		ID: id, Kind: kind, State: JobRunning, Phase: phase, Progress: 0,
+		Output: []string{}, StartedAt: c.now(),
+	}
 	c.jobs[id] = snapshot
 	c.order = append(c.order, id)
 	c.active = id
@@ -268,7 +271,8 @@ func (c *Coordinator) pruneLocked() {
 
 func cloneJob(snapshot *JobSnapshot) JobSnapshot {
 	cloned := *snapshot
-	cloned.Output = append([]string(nil), snapshot.Output...)
+	cloned.Output = make([]string, len(snapshot.Output))
+	copy(cloned.Output, snapshot.Output)
 	if snapshot.FinishedAt != nil {
 		finished := *snapshot.FinishedAt
 		cloned.FinishedAt = &finished

@@ -1,6 +1,7 @@
 import { FileSelectionType, openFilePicker } from '@decky/api';
 import {
     ConfirmModal,
+    DialogLabel,
     DialogButton,
     DropdownItem,
     Field,
@@ -10,18 +11,25 @@ import {
 } from '@decky/ui';
 import type { Dispatch } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaWineBottle } from 'react-icons/fa';
-import { installProtonArchive, preflightProtonArchive } from '../api';
-import { ReadinessItem } from '../readiness/readiness-item';
-import { readinessError } from '../shortcut-management/management';
-import { setupEventStore } from '../setup-events';
-import { LoadingSpinner } from '../shared/loading-spinner';
-import { logger } from '../shared/logger';
+import { installProtonArchive, preflightProtonArchive } from '@/api';
+import { ReadinessItem } from '@/readiness/readiness-item';
+import { isFilePickerCancellation } from '@/readiness-workspace/readiness-workspace-state';
+import { readinessError } from '@/shortcut-management/management';
+import { setupEventStore } from '@/setup-events';
+import { LoadingSpinner } from '@/shared/loading-spinner';
+import { logger } from '@/shared/logger';
 import {
-    isFilePickerCancellation,
     isSupportedProtonArchive,
     type ProtonDraft,
     type ProtonDraftAction
-} from './readiness-workspace-state';
+} from '@/readiness-workspace/linuwux/proton-state';
+
+interface ProtonSetupProps {
+    draft: ProtonDraft;
+    installedTools: string[];
+    mutationActive: boolean;
+    onDraft: Dispatch<ProtonDraftAction>;
+}
 
 const PROTON_PICKER_START_PATH = '/home';
 const SETUP_INTERRUPTION_WARNING =
@@ -29,11 +37,68 @@ const SETUP_INTERRUPTION_WARNING =
 // Decky filters by the final suffix; exact multi-suffix validation happens after selection.
 const PROTON_PICKER_EXTENSIONS = ['gz', 'tgz', 'xz'];
 
-interface ProtonSetupProps {
-    draft: ProtonDraft;
-    installedTools: string[];
-    mutationActive: boolean;
-    onDraft: Dispatch<ProtonDraftAction>;
+const protonSetupStyles = `
+    .hv-proton-description {
+        margin-bottom: 8px;
+    }
+`;
+
+function ProtonSelection({ draft, onDraft }: Pick<ProtonSetupProps, 'draft' | 'onDraft'>) {
+    const selection = draft.selection;
+    if (!selection) return null;
+    const preflight = selection.preflight;
+    return (
+        <>
+            <ReadinessItem
+                icon={FaWineBottle}
+                item={{
+                    title: preflight.fileName,
+                    detail: `${preflight.compression.toUpperCase()} archive · ${formatBytes(preflight.compressedBytes)}`,
+                    state: 'success'
+                }}
+            />
+            {preflight.destinations.length > 1 ? (
+                <>
+                    <Field
+                        label='Installation destination'
+                        description='Choose which Steam installation should receive this compatibility tool.'
+                    />
+                    <DropdownItem
+                        label='Steam installation'
+                        rgOptions={preflight.destinations.map((destination) => ({
+                            data: destination.id,
+                            label: destination.label
+                        }))}
+                        selectedOption={draft.destinationId}
+                        onChange={(option) =>
+                            onDraft({ type: 'destination-selected', destinationId: String(option.data) })
+                        }
+                    />
+                </>
+            ) : preflight.destinations.length === 1 ? (
+                <Field label='Steam installation' description={preflight.destinations[0].label} />
+            ) : (
+                <ReadinessItem
+                    icon={FaExclamationTriangle}
+                    item={{
+                        title: 'Steam installation not found',
+                        detail: 'Open Steam once, then return and select the archive again.',
+                        state: 'error'
+                    }}
+                />
+            )}
+        </>
+    );
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function humanize(value: string): string {
+    return value.replaceAll('-', ' ');
 }
 
 export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: ProtonSetupProps) {
@@ -103,6 +168,11 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
 
     return (
         <PanelSection title='Proton'>
+            <style>{protonSetupStyles}</style>
+            <DialogLabel className='hv-proton-description'>
+                Uses a LinUwUx-patched Proton build.
+            </DialogLabel>
+
             <Field
                 label='Installed supported builds'
                 description={
@@ -180,62 +250,4 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
             )}
         </PanelSection>
     );
-}
-
-function ProtonSelection({ draft, onDraft }: Pick<ProtonSetupProps, 'draft' | 'onDraft'>) {
-    const selection = draft.selection;
-    if (!selection) return null;
-    const preflight = selection.preflight;
-    return (
-        <>
-            <ReadinessItem
-                icon={FaWineBottle}
-                item={{
-                    title: preflight.fileName,
-                    detail: `${preflight.compression.toUpperCase()} archive · ${formatBytes(preflight.compressedBytes)}`,
-                    state: 'success'
-                }}
-            />
-            {preflight.destinations.length > 1 ? (
-                <>
-                    <Field
-                        label='Installation destination'
-                        description='Choose which Steam installation should receive this compatibility tool.'
-                    />
-                    <DropdownItem
-                        label='Steam installation'
-                        rgOptions={preflight.destinations.map((destination) => ({
-                            data: destination.id,
-                            label: destination.label
-                        }))}
-                        selectedOption={draft.destinationId}
-                        onChange={(option) =>
-                            onDraft({ type: 'destination-selected', destinationId: String(option.data) })
-                        }
-                    />
-                </>
-            ) : preflight.destinations.length === 1 ? (
-                <Field label='Steam installation' description={preflight.destinations[0].label} />
-            ) : (
-                <ReadinessItem
-                    icon={FaExclamationTriangle}
-                    item={{
-                        title: 'Steam installation not found',
-                        detail: 'Open Steam once, then return and select the archive again.',
-                        state: 'error'
-                    }}
-                />
-            )}
-        </>
-    );
-}
-
-function formatBytes(bytes: number): string {
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-    return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
-}
-
-function humanize(value: string): string {
-    return value.replaceAll('-', ' ');
 }

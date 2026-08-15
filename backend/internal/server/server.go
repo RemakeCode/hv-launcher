@@ -18,7 +18,8 @@ import (
 	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
-	"hv-launcher/internal/proton"
+	"hv-launcher/internal/linuwux/proton"
+	linuwuxruntime "hv-launcher/internal/linuwux/runtime"
 	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
@@ -38,7 +39,8 @@ type Options struct {
 	ProcessReader   system.Reader
 	ProcRoot        string
 	Logger          *slog.Logger
-	Proton          proton.Operator
+	Proton          proton.Manager
+	Runtime         linuwuxruntime.Manager
 	Jobs            *jobs.Coordinator
 	UMIP            *umip.Inspector
 	Capabilities    *auth.Verifier
@@ -55,7 +57,7 @@ type Service struct {
 
 func New(options Options) (*Service, error) {
 	if options.Config == nil || options.Inspector == nil || options.Manager == nil || options.Controller == nil ||
-		options.Proton == nil || options.Jobs == nil || options.UMIP == nil ||
+		options.Proton == nil || options.Runtime == nil || options.Jobs == nil || options.UMIP == nil ||
 		options.Capabilities == nil || options.ModulePreflight == nil ||
 		options.ModuleInstaller == nil {
 		return nil, errors.New("configuration, inspector, manager, controller, and setup services are required")
@@ -89,12 +91,16 @@ func (s *Service) routes() http.Handler {
 		api.Get("/status", s.status)
 		api.Get("/config", s.configuration)
 		api.Post("/games/{appID}/enable", s.enableGame)
+		api.Post("/games/{appID}/mode", s.reconfigureGame)
 		api.Post("/games/{appID}/disable", s.disableGame)
 		api.Post("/lifetime", s.lifetime)
 		api.Post("/sessions", s.startSession)
 		api.Delete("/sessions/{sessionID}", s.endSession)
 		api.Post("/setup/proton/preflight", s.preflightProtonArchive)
 		api.Post("/setup/proton/install", s.installProtonArchive)
+		api.Get("/setup/runtime", s.inspectRuntimeSetup)
+		api.Post("/setup/runtime", s.installRuntime)
+		api.Delete("/setup/runtime", s.removeRuntime)
 		api.Get("/setup/umip", s.inspectUMIP)
 		api.Post("/setup/umip", s.applyUMIP)
 		api.Get("/setup/module/preflight", s.inspectModuleRequirements)

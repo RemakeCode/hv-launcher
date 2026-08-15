@@ -5,17 +5,19 @@ import {
   observeSteamLifetime,
   observeSteamOverviews,
   readLaunchValue,
+  reconfigureManagedGame,
   SteamLibraryLoadingError,
   type MaterializedAppStore,
   type SteamBridge,
-} from "./steam";
-import type { Configuration } from "./types";
+} from '@/steam';
+import type { Configuration } from '@/types';
 
 const api = vi.hoisted(() => ({
   disableGame: vi.fn(),
   enableGame: vi.fn(),
   getConfiguration: vi.fn(),
   postLifetime: vi.fn(),
+  reconfigureGame: vi.fn(),
 }));
 
 vi.mock("./api", () => api);
@@ -191,6 +193,10 @@ describe("allApps discovery", () => {
     ).toThrow(SteamLibraryLoadingError);
   });
 
+  it("reports loading when Decky app stores are unavailable", () => {
+    expect(() => discoverGames(configuration)).toThrow(SteamLibraryLoadingError);
+  });
+
   it("preserves a configured missing shortcut for restoration while excluding stale native apps", () => {
     const configured: Configuration = {
       version: 1,
@@ -291,5 +297,79 @@ describe("disabling shortcut management", () => {
 
     expect(fixture.bridge.Apps.SetShortcutLaunchOptions).toHaveBeenCalledWith(42, "original");
     expect(api.disableGame).toHaveBeenCalledWith("42");
+  });
+});
+
+describe("changing a managed shortcut method", () => {
+  const configuration: Configuration = {
+    version: 1,
+    games: {
+      "42": {
+        appId: "42",
+        name: "Heroic Game",
+        shortcut: true,
+        originalLaunch: "original",
+        managedLaunch: "managed-proton",
+        wrapperPath: "/wrapper",
+      },
+    },
+  };
+  const game = { appId: "42", name: "Heroic Game", shortcut: true, enabled: true, running: false };
+
+  it("passes the current Steam value to backend conflict validation and preserves an external edit", async () => {
+    api.getConfiguration.mockResolvedValue(configuration);
+    api.reconfigureGame.mockRejectedValue(new Error("Steam launch options changed outside HV Launcher"));
+    const fixture = bridgeWithoutOverview();
+
+    await expect(reconfigureManagedGame(
+      game,
+      "runtime",
+      fixture.bridge,
+      { GetAppDetails: () => ({ strShortcutLaunchOptions: "externally edited" }) },
+    )).rejects.toThrow("changed outside HV Launcher");
+
+    expect(api.reconfigureGame).toHaveBeenCalledWith("42", "externally edited", "runtime");
+    expect(fixture.bridge.Apps.SetShortcutLaunchOptions).not.toHaveBeenCalled();
+  });
+
+  it("applies the backend-generated runtime launch value", async () => {
+    api.getConfiguration.mockResolvedValue(configuration);
+    api.reconfigureGame.mockResolvedValue({
+      appId: "42",
+      managedLaunch: "managed-runtime",
+      wrapperPath: "/wrapper",
+      mode: "runtime",
+    });
+    const fixture = bridgeWithoutOverview();
+
+    await reconfigureManagedGame(
+      game,
+      "runtime",
+      fixture.bridge,
+      { GetAppDetails: () => ({ strShortcutLaunchOptions: "managed-proton" }) },
+    );
+
+    expect(fixture.bridge.Apps.SetShortcutLaunchOptions).toHaveBeenCalledWith(42, "managed-runtime");
+  });
+
+  it("restores the backend record if Steam rejects the new value", async () => {
+    api.getConfiguration.mockResolvedValue(configuration);
+    api.reconfigureGame
+      .mockResolvedValueOnce({ appId: "42", managedLaunch: "managed-runtime", wrapperPath: "/wrapper", mode: "runtime" })
+      .mockResolvedValueOnce({ appId: "42", managedLaunch: "managed-proton", wrapperPath: "/wrapper", mode: "proton" });
+    const fixture = bridgeWithoutOverview();
+    vi.mocked(fixture.bridge.Apps.SetShortcutLaunchOptions).mockImplementationOnce(() => {
+      throw new Error("Steam setter failed");
+    });
+
+    await expect(reconfigureManagedGame(
+      game,
+      "runtime",
+      fixture.bridge,
+      { GetAppDetails: () => ({ strShortcutLaunchOptions: "managed-proton" }) },
+    )).rejects.toThrow("Steam setter failed");
+
+    expect(api.reconfigureGame).toHaveBeenNthCalledWith(1, "42", "managed-proton", "runtime");
+    expect(api.reconfigureGame).toHaveBeenNthCalledWith(2, "42", "managed-runtime", "proton");
   });
 });

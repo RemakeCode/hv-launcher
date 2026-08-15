@@ -1,10 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"hv-launcher/internal/linuwux"
 	"hv-launcher/internal/model"
 )
 
@@ -75,5 +77,75 @@ func TestStoreRollsBackMemoryWhenPersistenceFails(t *testing.T) {
 	}
 	if game, ok := store.Game("10"); !ok || game != original {
 		t.Fatalf("failed delete was not rolled back: %+v, %v", game, ok)
+	}
+}
+
+func TestOptionalModesRemainAbsentUntilExplicitlySaved(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	original := []byte("{\n  \"version\": 1,\n  \"games\": {\n    \"10\": {\"appId\": \"10\", \"name\": \"Legacy\"}\n  }\n}\n")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	game, ok := store.Game("10")
+	if !ok || game.Mode.ResolveLegacyMode() != linuwux.ModeProton || game.Mode != "" {
+		t.Fatalf("legacy mode = %q (resolved %q)", game.Mode, game.Mode.ResolveLegacyMode())
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(after, original) {
+		t.Fatalf("opening legacy config rewrote it:\n%s", after)
+	}
+
+	game.Mode = linuwux.ModeRuntime
+	if err := store.PutGame(game); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := Open(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved, _ := reopened.Game("10"); saved.Mode != linuwux.ModeRuntime {
+		t.Fatalf("saved game mode = %q", saved.Mode)
+	}
+}
+
+func TestInvalidModesAreRejectedAtWriteTime(t *testing.T) {
+	for _, document := range []string{
+		`{"version":1,"games":{"10":{"appId":"10","mode":"automatic"}}}`,
+	} {
+		t.Run(document, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "config.json")
+			original := []byte(document)
+			if err := os.WriteFile(path, original, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := Open(dir); err != nil {
+				t.Fatalf("opening manually edited configuration failed: %v", err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(after, original) {
+				t.Fatal("invalid configuration was rewritten")
+			}
+		})
+	}
+
+	store, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.PutGame(model.ManagedGame{AppID: "10", Mode: "invalid"}); err == nil {
+		t.Fatal("invalid game mode was persisted")
 	}
 }

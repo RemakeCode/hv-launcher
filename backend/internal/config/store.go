@@ -104,6 +104,10 @@ func (s *Store) Game(appID string) (model.ManagedGame, bool) {
 }
 
 func (s *Store) PutGame(game model.ManagedGame) error {
+	if game.Mode != "" && !game.Mode.Valid() {
+		return fmt.Errorf("invalid LinUwUx mode %q", game.Mode)
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	previous, existed := s.doc.Games[game.AppID]

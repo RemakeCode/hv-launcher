@@ -1,4 +1,5 @@
-import type { ModuleDraft, ProtonDraft, UMIPDraft } from '../readiness-workspace/readiness-workspace-state';
+import type { ProtonDraft } from '@/readiness-workspace/linuwux/proton-state';
+import type { ModuleDraft, UMIPDraft } from '@/readiness-workspace/readiness-workspace-state';
 import type {
   AggregateStatus,
   Check,
@@ -12,7 +13,7 @@ import type {
   SystemStatus,
   UMIPCandidate,
   UMIPInspection
-} from '../types';
+} from '@/types';
 
 type ProtonWorkspaceFixtureName = 'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
 type UMIPWorkspaceFixtureName =
@@ -67,6 +68,7 @@ function check(id: string, label: string, detail: string, ok = true, remedy?: st
 }
 
 function status(overrides: Partial<SystemStatus>): SystemStatus {
+  const proton = overrides.proton ?? { found: true, tools: ['GE-Proton11-1-LinUwUx'] };
   return {
     status: 'hypervisor-ready',
     path: 'hypervisor',
@@ -93,7 +95,20 @@ function status(overrides: Partial<SystemStatus>): SystemStatus {
       kvmBusy: false,
       controllerState: 'idle'
     },
-    proton: { found: true, tools: ['GE-Proton11-1-LinUwUx'] },
+    proton,
+    linuwux: {
+      available: proton.found,
+      proton,
+      runtime: {
+        supported: true,
+        available: false,
+        state: 'absent',
+        path: '/home/deck/.local/bin/linuwux',
+        libraryPath: '/home/deck/.local/lib/liblinuwux.so',
+        versionKnown: false,
+        updateState: 'unknown'
+      }
+    },
     checks: [],
     ...overrides
   };
@@ -124,7 +139,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.18.0-visual-fixture'),
         check('umip', 'UMIP', 'disabled as required'),
         check('cpuid-fault', 'Native CPUID faulting', 'advertised by the running kernel'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   },
@@ -161,7 +176,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.0.1-visual-fixture'),
         check('umip', 'UMIP', 'not required'),
         check('cpuid-fault', 'Native CPUID faulting', 'advertised by the running kernel'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   },
@@ -189,7 +204,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.11.11-visual-fixture'),
         check('umip', 'UMIP', 'disabled as required'),
         check('emulation-module', 'CPUID module', 'installed and compatible'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   },
@@ -217,7 +232,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.18.0-visual-fixture'),
         check('umip', 'UMIP', 'disabled as required'),
         check('cpuid-fault', 'Native CPUID faulting', 'advertised by the running kernel'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   },
@@ -229,7 +244,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
         check('umip', 'UMIP', 'disabled as required'),
         check('emulation-module', 'CPUID module', 'installed and compatible'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   },
@@ -265,7 +280,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
         check('umip', 'UMIP', 'enabled and blocking', false, 'Add clearcpuid=514 (or clearcpuid=umip) to the kernel command line and reboot.'),
         check('emulation-module', 'CPUID module', 'installed module does not match the running kernel', false, 'Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it.'),
-        check('proton', 'Proton', 'no supported build detected', false, 'Open Readiness details and setup to install a LinUwUx Proton archive.')
+        check('linuwux', 'LinUwUx integration', 'no supported method detected', false, 'Open Readiness details and setup to install LinUwUx Proton or the LinUwUx runtime.')
       ]
     })
   },
@@ -287,7 +302,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
         check('umip', 'UMIP', 'disabled as required'),
         check('emulation-module', 'CPUID module', 'installed, compatible, and loaded'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   },
@@ -313,7 +328,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         check('cpu', 'CPU', 'Intel 3rd generation', false, 'Requires Intel 4th generation or AMD Ryzen 1st generation or newer.'),
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
         check('umip', 'UMIP', 'not required'),
-        check('proton', 'Proton', 'GE-Proton11-1-LinUwUx')
+        check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
       ]
     })
   }

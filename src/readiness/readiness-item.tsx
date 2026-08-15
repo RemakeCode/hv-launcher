@@ -6,7 +6,7 @@ import {
   FaInfoCircle,
   FaSyncAlt
 } from 'react-icons/fa';
-import type { AggregateStatus, SystemStatus } from '../types';
+import type { AggregateStatus, SystemStatus } from '@/types';
 
 export type ReadinessState = 'success' | 'info' | 'active' | 'warning' | 'error';
 
@@ -33,6 +33,46 @@ const statePresentation: Record<ReadinessState, {
   warning: { color: '#e5af37', icon: FaExclamationTriangle, label: 'Attention required' },
   error: { color: '#ff6b6b', icon: FaExclamationTriangle, label: 'Action required' }
 };
+
+const readinessItemStyles = `
+  .hv-readiness-item {
+    align-items: start;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    display: grid;
+    gap: 10px;
+    grid-template-columns: 22px minmax(0, 1fr) 20px;
+    padding: 10px 0;
+  }
+
+  .hv-readiness-item__icon {
+    font-size: 17px;
+    margin-top: 2px;
+    opacity: 0.85;
+  }
+
+  .hv-readiness-item__content {
+    min-width: 0;
+  }
+
+  .hv-readiness-item__title {
+    font-weight: 600;
+  }
+
+  .hv-readiness-item__detail {
+    margin-top: 2px;
+    opacity: 0.78;
+  }
+
+  .hv-readiness-item__remedy {
+    color: #ff6b6b;
+    margin-top: 5px;
+  }
+
+  .hv-readiness-item__status-icon {
+    font-size: 17px;
+    margin-top: 2px;
+  }
+`;
 
 export function readinessColor(state: ReadinessState): string {
   return statePresentation[state].color;
@@ -65,27 +105,23 @@ export function ReadinessItem({ icon: ItemIcon, item }: ReadinessItemProps) {
   const StatusIcon = presentation.icon;
 
   return (
-    <div
-      style={{
-        alignItems: 'start',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
-        display: 'grid',
-        gap: 10,
-        gridTemplateColumns: '22px minmax(0, 1fr) 20px',
-        padding: '10px 0'
-      }}
-    >
-      <ItemIcon aria-hidden style={{ fontSize: 17, marginTop: 2, opacity: 0.85 }} />
-      <div style={{ minWidth: 0 }}>
-        <div style={{ fontWeight: 600 }}>{item.title}</div>
-        <div style={{ marginTop: 2, opacity: 0.78 }}>{item.detail}</div>
-        {item.remedy && (
-          <div style={{ color: readinessColor('error'), marginTop: 5 }}>{item.remedy}</div>
-        )}
+    <>
+      <style>{readinessItemStyles}</style>
+      <div className='hv-readiness-item'>
+        <ItemIcon aria-hidden className='hv-readiness-item__icon' />
+        <div className='hv-readiness-item__content'>
+          <div className='hv-readiness-item__title'>{item.title}</div>
+          <div className='hv-readiness-item__detail'>{item.detail}</div>
+          {item.remedy && <div className='hv-readiness-item__remedy'>{item.remedy}</div>}
+        </div>
+        <span aria-label={presentation.label} title={presentation.label}>
+          <StatusIcon
+            aria-hidden
+            className='hv-readiness-item__status-icon'
+            style={{ color: presentation.color }}
+          />
+        </span>
       </div>
-      <span aria-label={presentation.label} title={presentation.label}>
-        <StatusIcon aria-hidden style={{ color: presentation.color, fontSize: 17, marginTop: 2 }} />
-      </span>
-    </div>
+    </>
   );
 }

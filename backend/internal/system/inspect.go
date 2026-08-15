@@ -11,8 +11,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"hv-launcher/internal/linuwux/proton"
 	"hv-launcher/internal/model"
-	"hv-launcher/internal/proton"
 )
 
 type Inspector struct {
@@ -21,6 +21,11 @@ type Inspector struct {
 	Paths             Paths
 	VerificationStore model.ModuleVerificationStore
 	Logger            *slog.Logger
+	Runtime           RuntimeInspector
+}
+
+type RuntimeInspector interface {
+	Inspect(context.Context) (model.RuntimeStatus, error)
 }
 
 func NewInspector(userHome string) *Inspector {
@@ -43,7 +48,20 @@ func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.
 		return model.SystemStatus{}, moduleErr
 	}
 	proton := i.inspectProton()
-	status := deriveStatus(cpu, kernel, path, modules, proton, flags)
+	runtimeStatus := model.RuntimeStatus{State: model.RuntimeStateAbsent, UpdateState: model.RuntimeUpdateUnknown}
+	if i.Runtime != nil {
+		inspected, runtimeErr := i.Runtime.Inspect(ctx)
+		if runtimeErr != nil {
+			runtimeStatus = model.RuntimeStatus{
+				Supported: true, State: model.RuntimeStateInvalid, UpdateState: model.RuntimeUpdateUnknown,
+				Detail: "LinUwUx runtime inspection failed",
+			}
+			i.Logger.Warn("LinUwUx runtime inspection failed", "error", runtimeErr)
+		} else {
+			runtimeStatus = inspected
+		}
+	}
+	status := deriveStatusWithRuntime(cpu, kernel, path, modules, proton, runtimeStatus, flags)
 	return status, nil
 }
 
@@ -260,6 +278,12 @@ func (i *Inspector) inspectProton() model.ProtonStatus {
 }
 
 func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.PathMode, modules model.ModuleStatus, proton model.ProtonStatus, _ map[string]bool) model.SystemStatus {
+	return deriveStatusWithRuntime(cpu, kernel, path, modules, proton, model.RuntimeStatus{
+		State: model.RuntimeStateAbsent, UpdateState: model.RuntimeUpdateUnknown,
+	}, nil)
+}
+
+func deriveStatusWithRuntime(cpu model.CPUStatus, kernel model.KernelStatus, path model.PathMode, modules model.ModuleStatus, proton model.ProtonStatus, runtimeStatus model.RuntimeStatus, _ map[string]bool) model.SystemStatus {
 	checks := []model.Check{
 		{ID: "cpu", OK: cpu.Supported, Label: "CPU", Detail: cpu.Generation, Remedy: failedRemedy(cpu.Supported, "Requires Intel 4th generation or AMD Ryzen 1st generation or newer.")},
 		{ID: "kernel", OK: kernel.Supported, Label: "Linux kernel", Detail: kernel.Release, Remedy: failedRemedy(kernel.Supported, "Upgrade to Linux kernel 6.0 or newer.")},
@@ -275,7 +299,15 @@ func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.Pat
 		moduleOK := modules.EmulationInstalled && modules.EmulationCompatible && moduleVerificationReady(modules)
 		checks = append(checks, model.Check{ID: "emulation-module", OK: moduleOK, Label: "CPUID module", Detail: moduleDetail(modules), Remedy: moduleRemedy(modules, moduleOK)})
 	}
-	checks = append(checks, model.Check{ID: "proton", OK: proton.Found, Label: "Proton", Detail: protonDetail(proton), Remedy: failedRemedy(proton.Found, "Open Readiness details and setup to install a LinUwUx Proton archive.")})
+	integrationAvailable := proton.Found || runtimeStatus.Available
+	checks = append(checks, model.Check{
+		ID: "linuwux", OK: integrationAvailable, Label: "LinUwUx integration",
+		Detail: linuwuxDetail(proton, runtimeStatus),
+		Remedy: failedRemedy(integrationAvailable, "Open Readiness details and setup to install LinUwUx Proton or the LinUwUx runtime."),
+	})
+	linuwuxStatus := model.LinUwUxStatus{
+		Available: integrationAvailable, Proton: proton, Runtime: runtimeStatus,
+	}
 
 	aggregate := model.StatusSetupRequired
 	if modules.ControllerState == "recovery-required" {
@@ -289,7 +321,10 @@ func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.Pat
 			aggregate = model.StatusHypervisorReady
 		}
 	}
-	return model.SystemStatus{Status: aggregate, Path: path, CPU: cpu, Kernel: kernel, Modules: modules, Proton: proton, Checks: checks}
+	return model.SystemStatus{
+		Status: aggregate, Path: path, CPU: cpu, Kernel: kernel, Modules: modules,
+		Proton: proton, LinUwUx: linuwuxStatus, Checks: checks,
+	}
 }
 
 func intelGeneration(family, modelID int) int {
@@ -514,6 +549,33 @@ func protonDetail(status model.ProtonStatus) string {
 		return "no supported build detected"
 	}
 	return strings.Join(status.Tools, ", ")
+}
+
+func linuwuxDetail(proton model.ProtonStatus, runtimeStatus model.RuntimeStatus) string {
+	methods := make([]string, 0, 2)
+	if proton.Found {
+		methods = append(methods, "Proton: "+strings.Join(proton.Tools, ", "))
+	}
+	if runtimeStatus.Available {
+		detail := "Runtime installed"
+		if runtimeStatus.VersionKnown {
+			detail += " (v" + runtimeStatus.Version + ")"
+		}
+		methods = append(methods, detail)
+	}
+	if len(methods) > 0 {
+		return strings.Join(methods, "; ")
+	}
+	if runtimeStatus.State == model.RuntimeStateUnsupported {
+		return "no supported method detected; runtime is unsupported on this architecture"
+	}
+	if len(proton.Invalid) > 0 {
+		return "Proton: " + protonDetail(proton)
+	}
+	if runtimeStatus.State == model.RuntimeStateInvalid && runtimeStatus.Detail != "" {
+		return "Runtime: " + runtimeStatus.Detail
+	}
+	return "no supported method detected"
 }
 
 func allChecksOK(checks []model.Check) bool {

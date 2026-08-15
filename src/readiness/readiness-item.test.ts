@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   kvmReadinessState,
   managerReadinessState
-} from './readiness-item';
-import type { SystemStatus } from '../types';
+} from '@/readiness/readiness-item';
+import type { SystemStatus } from '@/types';
 
 function modules(overrides: Partial<SystemStatus['modules']> = {}): SystemStatus['modules'] {
   return {

@@ -5,8 +5,10 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
+	"hv-launcher/internal/linuwux"
 	"hv-launcher/internal/model"
+
+	"github.com/go-chi/chi/v5"
 )
 
 func (s *Service) configuration(w http.ResponseWriter, _ *http.Request) {
@@ -30,14 +32,76 @@ func (s *Service) enableGame(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, errors.New("game name must be between 1 and 256 characters"))
 		return
 	}
-	managed, err := s.options.Manager.Enable(appID, request.Name, request.Shortcut, request.CurrentLaunch)
+	mode, err := s.resolveMode(r, request.Mode)
+	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	managed, err := s.options.Manager.EnableWithMode(appID, request.Name, request.Shortcut, request.CurrentLaunch, mode)
 	if err != nil {
 		s.options.Logger.Error("failed to enable shortcut management", "app_id", appID, "name", request.Name, "error", err)
 		writeError(w, http.StatusConflict, err)
 		return
 	}
 	s.options.Logger.Info("shortcut management enabled", "app_id", appID, "name", request.Name)
-	writeJSON(w, http.StatusOK, model.ManageGameResponse{AppID: appID, ManagedLaunch: managed.ManagedLaunch, WrapperPath: managed.WrapperPath})
+	writeJSON(w, http.StatusOK, manageResponse(managed))
+}
+
+func (s *Service) reconfigureGame(w http.ResponseWriter, r *http.Request) {
+	appID, ok := validAppID(chi.URLParam(r, "appID"))
+	if !ok {
+		writeError(w, http.StatusBadRequest, errors.New("invalid App ID"))
+		return
+	}
+	var request model.ReconfigureGameRequest
+	if !decodeStrict(w, r, &request) {
+		return
+	}
+	mode, err := s.resolveMode(r, request.Mode)
+	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	managed, err := s.options.Manager.Reconfigure(appID, request.CurrentLaunch, mode)
+	if err != nil {
+		writeError(w, http.StatusConflict, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, manageResponse(managed))
+}
+
+func (s *Service) resolveMode(r *http.Request, requested linuwux.Mode) (linuwux.Mode, error) {
+	if requested != "" && !requested.Valid() {
+		return "", errors.New("mode must be proton or runtime")
+	}
+	status, err := s.options.Inspector.Inspect(r.Context(), string(s.options.Controller.State()))
+	if err != nil {
+		return "", err
+	}
+	if requested == linuwux.ModeProton && !status.LinUwUx.Proton.Found {
+		return "", errors.New("LinUwUx Proton is not currently available")
+	}
+	if requested == linuwux.ModeRuntime && !status.LinUwUx.Runtime.Available {
+		return "", errors.New("LinUwUx runtime is not currently available")
+	}
+	if requested.Valid() {
+		return requested, nil
+	}
+	availability := linuwux.Availability{
+		Proton:  status.LinUwUx.Proton.Found,
+		Runtime: status.LinUwUx.Runtime.Available,
+	}
+	mode, ok := availability.Resolve()
+	if !ok {
+		return "", errors.New("no LinUwUx method is currently available")
+	}
+	return mode, nil
+}
+
+func manageResponse(game model.ManagedGame) model.ManageGameResponse {
+	return model.ManageGameResponse{
+		AppID: game.AppID, ManagedLaunch: game.ManagedLaunch, WrapperPath: game.WrapperPath, Mode: game.Mode.ResolveLegacyMode(),
+	}
 }
 
 func (s *Service) disableGame(w http.ResponseWriter, r *http.Request) {

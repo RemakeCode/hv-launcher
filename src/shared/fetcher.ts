@@ -1,4 +1,6 @@
-type Transport = typeof fetch;
+import { fetchNoCors } from '@decky/api';
+
+type Transport = (input: string, init?: RequestInit) => Promise<Response>;
 
 export class FetcherError extends Error {
   constructor(
@@ -22,7 +24,7 @@ function errorMessage(value: unknown): string | undefined {
 export class Fetcher {
   constructor(
     private readonly baseUrl = "",
-    private readonly transport?: Transport,
+    private readonly transport: Transport = fetchNoCors,
   ) {}
 
   get<Type>(path: string): Promise<Type> {
@@ -54,7 +56,7 @@ export class Fetcher {
   private async request<Type>(path: string, init: RequestInit): Promise<Type> {
     let response: Response;
     try {
-      response = await (this.transport ?? fetch)(this.url(path), {
+      response = await this.transport(this.url(path), {
         ...init,
         headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
       });

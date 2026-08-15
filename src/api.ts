@@ -1,4 +1,4 @@
-import { Fetcher, FetcherError } from "./shared/fetcher";
+import { Fetcher, FetcherError } from '@/shared/fetcher';
 import type {
   Configuration,
   ManageResponse,
@@ -10,7 +10,9 @@ import type {
   UMIPInspection,
   ModulePreflight,
   ModuleTestResponse,
-} from "./types";
+  LinUwUxMode,
+  RuntimeSetupStatus,
+} from '@/types';
 
 export const BASE_URL = "http://127.0.0.1:42991/v1";
 export { FetcherError as BackendRequestError };
@@ -24,11 +26,18 @@ export const enableGame = (
   name: string,
   shortcut: boolean,
   currentLaunch: string,
+  mode?: LinUwUxMode,
 ) => fetcher.post<ManageResponse>(`/games/${appId}/enable`, {
   name,
   shortcut,
   currentLaunch,
+  ...(mode ? { mode } : {}),
 });
+export const reconfigureGame = (
+  appId: string,
+  currentLaunch: string,
+  mode: LinUwUxMode,
+) => fetcher.post<ManageResponse>(`/games/${appId}/mode`, { currentLaunch, mode });
 export const disableGame = (appId: string) =>
   fetcher.post<void>(`/games/${appId}/disable`, {});
 export const postLifetime = (appId: string, instanceId: number, running: boolean) =>
@@ -49,6 +58,14 @@ export const installProtonArchive = (
   destinationId,
   confirmedSource: true,
 });
+
+export const getRuntimeSetupStatus = () =>
+  fetcher.get<RuntimeSetupStatus>("/setup/runtime");
+
+export const installRuntime = (action: "install" | "update" | "repair") =>
+  fetcher.post<SetupJobSnapshot>("/setup/runtime", { action });
+
+export const removeRuntime = () => fetcher.delete<void>("/setup/runtime");
 
 export const getUMIPInspection = () =>
   fetcher.get<UMIPInspection>("/setup/umip");

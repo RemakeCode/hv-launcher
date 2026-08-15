@@ -1,13 +1,13 @@
 import { definePlugin, routerHook, toaster } from "@decky/api";
 import { staticClasses } from "@decky/ui";
 import { VscVmRunning } from "react-icons/vsc";
-import { ReadinessContent, MANAGEMENT_ROUTE, READINESS_ROUTE } from "./qam/qam";
-import { ReadinessWorkspace } from "./readiness-workspace/readiness-workspace";
-import { ShortcutManagementPage } from "./shortcut-management/shortcut-management-page";
-import { setupEventStore } from "./setup-events";
-import { logger } from "./shared/logger";
-import { observeSteamLifetime } from "./steam";
-import type { SetupJobSnapshot } from "./types";
+import { ReadinessContent, MANAGEMENT_ROUTE, READINESS_ROUTE } from '@/qam/qam';
+import { ReadinessWorkspace } from '@/readiness-workspace/readiness-workspace';
+import { ShortcutManagementPage } from '@/shortcut-management/shortcut-management-page';
+import { setupEventStore } from '@/setup-events';
+import { logger } from '@/shared/logger';
+import { observeSteamLifetime } from '@/steam';
+import type { SetupJobSnapshot } from '@/types';
 
 function setupToastBody(job: SetupJobSnapshot): string {
   const succeeded = job.state === "succeeded";
@@ -21,6 +21,10 @@ function setupToastBody(job: SetupJobSnapshot): string {
       return succeeded
         ? "The CPUID module installation finished. Reopen Readiness setup to review module verification and signature metadata."
         : "The CPUID module installation did not complete. Open Readiness setup for details.";
+    case "runtime-install":
+      return succeeded
+        ? "The LinUwUx runtime installation finished and is ready for managed shortcuts."
+        : "The LinUwUx runtime installation did not complete. Open Readiness setup for details.";
     default:
       return succeeded
         ? "The Proton installation finished. Restart Steam before selecting the new tool."

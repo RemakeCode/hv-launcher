@@ -1,5 +1,7 @@
 package model
 
+import "hv-launcher/internal/linuwux"
+
 type AggregateStatus string
 
 const (
@@ -114,6 +116,70 @@ type ProtonStatus struct {
 	Invalid []InvalidProtonTool `json:"invalid,omitempty"`
 }
 
+type RuntimeState string
+
+const (
+	RuntimeStateAbsent      RuntimeState = "absent"
+	RuntimeStateAvailable   RuntimeState = "available"
+	RuntimeStateInvalid     RuntimeState = "invalid"
+	RuntimeStateUnsupported RuntimeState = "unsupported"
+)
+
+type RuntimeUpdateState string
+
+const (
+	RuntimeUpdateUnknown   RuntimeUpdateState = "unknown"
+	RuntimeUpdateCurrent   RuntimeUpdateState = "current"
+	RuntimeUpdateAvailable RuntimeUpdateState = "update-available"
+)
+
+type RuntimeStatus struct {
+	Supported     bool               `json:"supported"`
+	Available     bool               `json:"available"`
+	State         RuntimeState       `json:"state"`
+	Path          string             `json:"path"`
+	LibraryPath   string             `json:"libraryPath"`
+	Version       string             `json:"version,omitempty"`
+	VersionKnown  bool               `json:"versionKnown"`
+	Detail        string             `json:"detail,omitempty"`
+	UpdateState   RuntimeUpdateState `json:"updateState"`
+	LatestVersion string             `json:"latestVersion,omitempty"`
+}
+
+type LinUwUxStatus struct {
+	Available bool          `json:"available"`
+	Proton    ProtonStatus  `json:"proton"`
+	Runtime   RuntimeStatus `json:"runtime"`
+}
+
+type RuntimeReleaseAsset struct {
+	Name   string `json:"name"`
+	URL    string `json:"-"`
+	Digest string `json:"-"`
+}
+
+type RuntimeRelease struct {
+	Repository string                         `json:"repository"`
+	Tag        string                         `json:"tag"`
+	Version    string                         `json:"version"`
+	Assets     map[string]RuntimeReleaseAsset `json:"-"`
+}
+
+type RuntimeSetupStatus struct {
+	Runtime     RuntimeStatus   `json:"runtime"`
+	Repository  string          `json:"repository"`
+	Latest      *RuntimeRelease `json:"latest,omitempty"`
+	UpdateError string          `json:"updateError,omitempty"`
+}
+
+type RuntimeInstallResult struct {
+	Repository  string `json:"repository"`
+	ReleaseTag  string `json:"releaseTag"`
+	Version     string `json:"version"`
+	Path        string `json:"path"`
+	LibraryPath string `json:"libraryPath"`
+}
+
 type InvalidProtonTool struct {
 	Name   string `json:"name"`
 	Detail string `json:"detail"`
@@ -126,16 +192,18 @@ type SystemStatus struct {
 	Kernel  KernelStatus    `json:"kernel"`
 	Modules ModuleStatus    `json:"modules"`
 	Proton  ProtonStatus    `json:"proton"`
+	LinUwUx LinUwUxStatus   `json:"linuwux"`
 	Checks  []Check         `json:"checks"`
 }
 
 type ManagedGame struct {
-	AppID          string `json:"appId"`
-	Name           string `json:"name"`
-	Shortcut       bool   `json:"shortcut"`
-	OriginalLaunch string `json:"originalLaunch"`
-	ManagedLaunch  string `json:"managedLaunch"`
-	WrapperPath    string `json:"wrapperPath"`
+	AppID          string       `json:"appId"`
+	Name           string       `json:"name"`
+	Shortcut       bool         `json:"shortcut"`
+	OriginalLaunch string       `json:"originalLaunch"`
+	ManagedLaunch  string       `json:"managedLaunch"`
+	WrapperPath    string       `json:"wrapperPath"`
+	Mode           linuwux.Mode `json:"mode,omitempty"`
 }
 
 type ConfigDocument struct {
@@ -144,15 +212,22 @@ type ConfigDocument struct {
 }
 
 type ManageGameRequest struct {
-	Name          string `json:"name"`
-	Shortcut      bool   `json:"shortcut"`
-	CurrentLaunch string `json:"currentLaunch"`
+	Name          string       `json:"name"`
+	Shortcut      bool         `json:"shortcut"`
+	CurrentLaunch string       `json:"currentLaunch"`
+	Mode          linuwux.Mode `json:"mode,omitempty"`
 }
 
 type ManageGameResponse struct {
-	AppID         string `json:"appId"`
-	ManagedLaunch string `json:"managedLaunch"`
-	WrapperPath   string `json:"wrapperPath"`
+	AppID         string       `json:"appId"`
+	ManagedLaunch string       `json:"managedLaunch"`
+	WrapperPath   string       `json:"wrapperPath"`
+	Mode          linuwux.Mode `json:"mode"`
+}
+
+type ReconfigureGameRequest struct {
+	CurrentLaunch string       `json:"currentLaunch"`
+	Mode          linuwux.Mode `json:"mode"`
 }
 
 type SessionStartRequest struct {

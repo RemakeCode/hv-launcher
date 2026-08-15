@@ -4,25 +4,52 @@ import {
     DialogControlsSectionHeader,
     DialogLabel,
     SidebarNavigation,
-    ToggleField
 } from '@decky/ui';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { getConfiguration, getStatus } from '../api';
-import { groupShortcuts, shortcutActionError, shortcutDescription } from './management';
-import { logger } from '../shared/logger';
-import { LoadingSpinner } from '../shared/loading-spinner';
+import { getConfiguration, getStatus } from '@/api';
+import {
+    availableModes,
+    effectiveGameMode,
+    groupShortcuts,
+    isModeAvailable,
+    shortcutActionError,
+    shortcutModeError
+} from '@/shortcut-management/management';
+import { ShortcutGameRow } from '@/shortcut-management/shortcut-game-row';
+import { logger } from '@/shared/logger';
+import { LoadingSpinner } from '@/shared/loading-spinner';
 import {
     disableManagedGame,
     discoverGames,
     displayState,
     enableManagedGame,
     observeSteamOverviews,
+    reconfigureManagedGame,
     SteamLibraryLoadingError
-} from '../steam';
-import type { Configuration, DisplayState, Game, SystemStatus } from '../types';
+} from '@/steam';
+import type { Configuration, DisplayState, Game, LinUwUxMode, SystemStatus } from '@/types';
 import { GiGamepad } from 'react-icons/gi';
 
 const EMPTY_CONFIGURATION: Configuration = { version: 1, games: {} };
+
+const shortcutManagementStyles = `
+  .hv-shortcut-error {
+    color: #ffb4a9;
+    margin-block: 8px;
+  }
+
+  .hv-shortcut-library-message {
+    margin-bottom: 16px;
+  }
+
+  .hv-shortcut-empty {
+    margin-block-start: 8px;
+  }
+`;
+
+function modeLabel(mode: LinUwUxMode): string {
+    return mode === 'runtime' ? 'LinUwUx runtime' : 'LinUwUx Proton';
+}
 
 export function ShortcutManagementPage() {
     const [status, setStatus] = useState<SystemStatus>();
@@ -31,6 +58,8 @@ export function ShortcutManagementPage() {
     const [busy, setBusy] = useState<string>();
     const [error, setError] = useState('');
     const [libraryMessage, setLibraryMessage] = useState('');
+    const [configuration, setConfiguration] = useState<Configuration>(EMPTY_CONFIGURATION);
+    const [selections, setSelections] = useState<Record<string, LinUwUxMode>>({});
     const configurationRef = useRef<Configuration>(EMPTY_CONFIGURATION);
 
     const refreshLibrary = useCallback((configuration: Configuration) => {
@@ -54,6 +83,7 @@ export function ShortcutManagementPage() {
         try {
             const [nextStatus, configuration] = await Promise.all([getStatus(), getConfiguration()]);
             configurationRef.current = configuration;
+            setConfiguration(configuration);
             setStatus(nextStatus);
             refreshLibrary(configuration);
             setError('');
@@ -84,7 +114,11 @@ export function ShortcutManagementPage() {
         setBusy(game.appId);
         setError('');
         try {
-            if (enabled) await enableManagedGame(game);
+            const mode = selections[game.appId] ?? availableModes(status!)[0] ?? 'proton';
+            if (enabled && !isModeAvailable(status!, mode)) {
+                throw new Error(`${modeLabel(mode)} setup is required before enabling this shortcut.`);
+            }
+            if (enabled) await enableManagedGame(game, mode);
             else await disableManagedGame(game);
             await refresh();
         } catch (reason) {
@@ -95,15 +129,40 @@ export function ShortcutManagementPage() {
         }
     };
 
+    const changeMode = async (game: Game, mode: LinUwUxMode) => {
+        const previous = selections[game.appId] ?? effectiveGameMode(configuration, game.appId);
+        if (!isModeAvailable(status!, mode)) {
+            setError(`${modeLabel(mode)} setup is required before it can be selected.`);
+            return;
+        }
+        setSelections((current) => ({ ...current, [game.appId]: mode }));
+        if (!game.enabled) return;
+        setBusy(game.appId);
+        setError('');
+        try {
+            await reconfigureManagedGame(game, mode);
+            await refresh();
+        } catch (reason) {
+            setSelections((current) => ({ ...current, [game.appId]: previous }));
+            logger.error(`Failed to change LinUwUx method for ${game.name}`, reason);
+            setError(shortcutModeError(game, reason));
+        } finally {
+            setBusy(undefined);
+        }
+    };
+
     const sections = groupShortcuts(games);
-    const row = (game: Game) => (
-        <ToggleField
+    const renderRow = (game: Game) => (
+        <ShortcutGameRow
             key={game.appId}
-            label={game.name}
-            description={shortcutDescription(game, states[game.appId] ?? 'idle', busy === game.appId)}
-            checked={game.enabled}
-            disabled={busy !== undefined}
-            onChange={(enabled) => void toggle(game, enabled)}
+            game={game}
+            state={states[game.appId]}
+            busy={busy === game.appId}
+            configuration={configuration}
+            selections={selections}
+            status={status!}
+            onToggle={(nextGame, enabled) => void toggle(nextGame, enabled)}
+            onChangeMode={(nextGame, mode) => void changeMode(nextGame, mode)}
         />
     );
 
@@ -115,34 +174,44 @@ export function ShortcutManagementPage() {
                     icon: <GiGamepad />,
                     content: (
                         <DialogBody>
-                            {!status && !error && <LoadingSpinner />}
-                            {status && status.status !== 'hypervisor-ready' && (
-                                <DialogLabel>
-                                    Readiness affects game launch, not shortcut configuration.
-                                </DialogLabel>
+                            <style>{shortcutManagementStyles}</style>
+                            {!status ? (
+                                error ? (
+                                    <DialogLabel className='hv-shortcut-error'>{error}</DialogLabel>
+                                ) : (
+                                    <LoadingSpinner />
+                                )
+                            ) : (
+                                <>
+                                    {status.status !== 'hypervisor-ready' && (
+                                        <DialogLabel>
+                                            Readiness affects game launch, not shortcut configuration.
+                                        </DialogLabel>
+                                    )}
+                                    {libraryMessage && <DialogLabel className='hv-shortcut-library-message'>{libraryMessage}</DialogLabel>}
+
+                                    <DialogControlsSection>
+                                        {error && (
+                                            <DialogLabel className='hv-shortcut-error'>{error}</DialogLabel>
+                                        )}
+                                        <DialogControlsSectionHeader>Managed shortcuts</DialogControlsSectionHeader>
+                                        {sections.managed.length > 0 ? (
+                                            sections.managed.map(renderRow)
+                                        ) : (
+                                            <DialogLabel className='hv-shortcut-empty'>No managed shortcuts.</DialogLabel>
+                                        )}
+                                    </DialogControlsSection>
+
+                                    <DialogControlsSection>
+                                        <DialogControlsSectionHeader>Available shortcuts</DialogControlsSectionHeader>
+                                        {sections.available.length > 0 ? (
+                                            sections.available.map(renderRow)
+                                        ) : (
+                                            <DialogLabel>No available installed shortcuts.</DialogLabel>
+                                        )}
+                                    </DialogControlsSection>
+                                </>
                             )}
-                            {libraryMessage && <DialogLabel style={{ marginBottom: 16 }}>{libraryMessage}</DialogLabel>}
-
-                            <DialogControlsSection>
-                                {error && (
-                                    <DialogLabel style={{ color: '#ffb4a9', marginBlock: '8px' }}>{error}</DialogLabel>
-                                )}
-                                <DialogControlsSectionHeader>Managed shortcuts</DialogControlsSectionHeader>
-                                {sections.managed.length > 0 ? (
-                                    sections.managed.map(row)
-                                ) : (
-                                    <DialogLabel style={{ marginBlockStart: '8px' }}>No managed shortcuts.</DialogLabel>
-                                )}
-                            </DialogControlsSection>
-
-                            <DialogControlsSection>
-                                <DialogControlsSectionHeader>Available shortcuts</DialogControlsSectionHeader>
-                                {sections.available.length > 0 ? (
-                                    sections.available.map(row)
-                                ) : (
-                                    <DialogLabel>No available installed shortcuts.</DialogLabel>
-                                )}
-                            </DialogControlsSection>
                         </DialogBody>
                     )
                 }

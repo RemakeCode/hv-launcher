@@ -85,6 +85,57 @@ func TestSuccessfulSessionWrapsChildAndCleansUp(t *testing.T) {
 	}
 }
 
+func TestMissingManagedChildFailsNormallyAndCleansUpWithoutFallback(t *testing.T) {
+	var ended bool
+	restore := useTransport(t, func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodPost {
+			return response(http.StatusOK, `{"sessionId":"runtime-session"}`), nil
+		}
+		if r.Method == http.MethodDelete && strings.HasSuffix(r.URL.Path, "/runtime-session") {
+			ended = true
+			return response(http.StatusNoContent, ""), nil
+		}
+		return response(http.StatusNotFound, ""), nil
+	})
+	defer restore()
+
+	err := Run(context.Background(), Options{
+		AppID: "10", BaseURL: "http://service/v1", HTTPTimeout: time.Second,
+		Command: []string{"/missing/configured-child", "/bin/true"},
+	})
+	if err == nil {
+		t.Fatal("missing managed child unexpectedly succeeded")
+	}
+	if !ended {
+		t.Fatal("session was not cleaned up after managed child failure")
+	}
+}
+
+func TestMissingPassthroughChildFailsWithoutCleanupOrFallback(t *testing.T) {
+	var ended bool
+	restore := useTransport(t, func(r *http.Request) (*http.Response, error) {
+		if r.Method == http.MethodPost {
+			return response(http.StatusOK, `{"mode":"passthrough"}`), nil
+		}
+		if r.Method == http.MethodDelete {
+			ended = true
+		}
+		return response(http.StatusNoContent, ""), nil
+	})
+	defer restore()
+
+	err := Run(context.Background(), Options{
+		AppID: "10", BaseURL: "http://service/v1", HTTPTimeout: time.Second,
+		Command: []string{"/missing/configured-child"},
+	})
+	if err == nil {
+		t.Fatal("missing passthrough child unexpectedly succeeded")
+	}
+	if ended {
+		t.Fatal("passthrough session sent controller cleanup after child failure")
+	}
+}
+
 func TestPassthroughSessionRunsChildWithoutControllerCleanup(t *testing.T) {
 	output := filepath.Join(t.TempDir(), "ran")
 	var ended bool

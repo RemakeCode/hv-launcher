@@ -14,6 +14,9 @@ import (
 )
 
 func TestWorkerClientUsesDeckyCredentialsAndMinimalEnvironment(t *testing.T) {
+	if WorkerCommand != "linuwux-proton-worker" {
+		t.Fatalf("Proton worker command = %q", WorkerCommand)
+	}
 	client, err := NewWorkerClient("/opt/hv-launcher", "/home/deck", 1000, 1000)
 	if err != nil {
 		t.Fatal(err)
@@ -34,7 +37,7 @@ func TestWorkerClientUsesDeckyCredentialsAndMinimalEnvironment(t *testing.T) {
 
 func TestWorkerRejectsPrivilegedDeckyIdentity(t *testing.T) {
 	if _, err := NewWorkerClient("/opt/hv-launcher", "/root", 0, 0); err == nil {
-		t.Fatal("root Proton worker identity was accepted")
+		t.Fatal("root LinUwUx Proton worker identity was accepted")
 	}
 }
 

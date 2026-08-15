@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  availableModes,
+  effectiveGameMode,
   groupShortcuts,
   shouldShowShortcutManagement,
-} from "./management";
-import type { Configuration, Game } from "../types";
+} from '@/shortcut-management/management';
+import type { Configuration, Game, SystemStatus } from '@/types';
 
 const emptyConfiguration: Configuration = { version: 1, games: {} };
 const managedConfiguration: Configuration = {
@@ -55,6 +57,17 @@ describe("Shortcut management model", () => {
     expect(shouldShowShortcutManagement({ path: "native" }, emptyConfiguration)).toBe(false);
   });
 
+  it("offers management on a native path when the runtime is available", () => {
+    expect(shouldShowShortcutManagement(methodStatus(false, true), emptyConfiguration)).toBe(true);
+  });
+
+  it("exposes only installed method choices", () => {
+    expect(effectiveGameMode(managedConfiguration, "12")).toBe("proton");
+    expect(availableModes(methodStatus(true, false))).toEqual(["proton"]);
+    expect(availableModes(methodStatus(false, true))).toEqual(["runtime"]);
+    expect(availableModes(methodStatus(true, true))).toEqual(["proton", "runtime"]);
+  });
+
   it("does not expose management for stale native-app records", () => {
     const configuration: Configuration = {
       version: 1,
@@ -65,3 +78,31 @@ describe("Shortcut management model", () => {
     expect(shouldShowShortcutManagement({ path: "none" }, configuration)).toBe(false);
   });
 });
+
+function methodStatus(proton: boolean, runtime: boolean): SystemStatus {
+  return {
+    status: "native-ready",
+    path: "native",
+    cpu: {
+      vendor: "GenuineIntel", modelName: "CPU", family: 6, modelId: 60,
+      architecture: "intel-gen4", generation: "Intel 4th generation", supported: true,
+      steamDeck: false, umipPresent: false, umipRequiredOff: false, cpuidFaultFlag: true,
+    },
+    kernel: { release: "6.18", major: 6, minor: 18, supported: true },
+    modules: {
+      emulationInstalled: false, emulationLoaded: false, emulationCompatible: false,
+      kvmLoaded: false, kvmAmdLoaded: false, kvmBusy: false, controllerState: "idle",
+    },
+    proton: { found: proton, tools: proton ? ["LinUwUx Proton"] : [] },
+    linuwux: {
+      available: proton || runtime,
+      proton: { found: proton, tools: proton ? ["LinUwUx Proton"] : [] },
+      runtime: {
+        supported: true, available: runtime, state: runtime ? "available" : "absent",
+        path: "/home/deck/.local/bin/linuwux", libraryPath: "/home/deck/.local/lib/liblinuwux.so",
+        versionKnown: runtime, version: runtime ? "26.08.14.1" : undefined, updateState: "unknown",
+      }
+    },
+    checks: [],
+  };
+}

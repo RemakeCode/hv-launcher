@@ -1,4 +1,4 @@
-import type { Configuration, DisplayState, Game, SystemStatus } from "../types";
+import type { Configuration, DisplayState, Game, LinUwUxMode, SystemStatus } from '@/types';
 
 export interface ShortcutSections {
   managed: Game[];
@@ -6,11 +6,27 @@ export interface ShortcutSections {
 }
 
 export function shouldShowShortcutManagement(
-  status: Pick<SystemStatus, "path">,
+  status: Pick<SystemStatus, "path"> & { linuwux?: Pick<SystemStatus["linuwux"], "runtime"> },
   configuration: Configuration,
 ): boolean {
   return status.path === "hypervisor" ||
+    status.linuwux?.runtime.available === true ||
     Object.values(configuration.games).some((game) => game.shortcut);
+}
+
+export function effectiveGameMode(configuration: Configuration, appId: string): LinUwUxMode {
+  return configuration.games[appId]?.mode ?? "proton";
+}
+
+export function availableModes(status: SystemStatus): LinUwUxMode[] {
+  const modes: LinUwUxMode[] = [];
+  if (status.linuwux.proton.found) modes.push("proton");
+  if (status.linuwux.runtime.available) modes.push("runtime");
+  return modes;
+}
+
+export function isModeAvailable(status: SystemStatus, mode: LinUwUxMode): boolean {
+  return mode === "proton" ? status.linuwux.proton.found : status.linuwux.runtime.available;
 }
 
 export function groupShortcuts(games: Game[]): ShortcutSections {
@@ -49,4 +65,8 @@ export function shortcutActionError(
   reason: unknown,
 ): string {
   return `Failed to ${enabled ? "enable" : "disable"} “${game.name}”: ${errorMessage(reason)}`;
+}
+
+export function shortcutModeError(game: Game, reason: unknown): string {
+  return `Failed to change the LinUwUx method for “${game.name}”: ${errorMessage(reason)}`;
 }
