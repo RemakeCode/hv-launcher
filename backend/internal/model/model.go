@@ -110,8 +110,16 @@ type SessionStartRequest struct {
 	AppID string `json:"appId"`
 }
 
+type SessionMode string
+
+const (
+	SessionModeHypervisor  SessionMode = "hypervisor"
+	SessionModePassthrough SessionMode = "passthrough"
+)
+
 type SessionStartResponse struct {
-	SessionID string `json:"sessionId"`
+	SessionID string      `json:"sessionId"`
+	Mode      SessionMode `json:"mode,omitempty"`
 }
 
 type LifetimeRequest struct {

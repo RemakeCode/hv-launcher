@@ -23,6 +23,33 @@ func NewInspector(userHome string) *Inspector {
 	return &Inspector{Reader: OSReader{}, Runner: ExecRunner{}, Paths: DefaultPaths(userHome)}
 }
 
+func (i *Inspector) CompatibilityPath() (model.PathMode, error) {
+	cpuData, err := i.Reader.ReadFile(i.Paths.CPUInfo)
+	if err != nil {
+		return model.PathNone, fmt.Errorf("read CPU information: %w", err)
+	}
+
+	kernelData, err := i.Reader.ReadFile(i.Paths.KernelRelease)
+	if err != nil {
+		return model.PathNone, fmt.Errorf("read kernel release: %w", err)
+	}
+
+	dmi := strings.Join([]string{
+		readOptional(i.Reader, i.Paths.DMIProduct),
+		readOptional(i.Reader, i.Paths.DMIBoard),
+		readOptional(i.Reader, i.Paths.DMIVendor),
+	}, " ")
+	cpu, _, err := classifyCPU(string(cpuData), dmi)
+	if err != nil {
+		return model.PathNone, err
+	}
+	kernel, err := classifyKernel(strings.TrimSpace(string(kernelData)))
+	if err != nil {
+		return model.PathNone, err
+	}
+	return selectPath(cpu, kernel), nil
+}
+
 func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.SystemStatus, error) {
 	cpuData, err := i.Reader.ReadFile(i.Paths.CPUInfo)
 	if err != nil {
