@@ -105,6 +105,7 @@ tasks:
     cmds:
       - task: package:sync
       - 'sudo -n rsync -a --delete "{{.ROOT_DIR}}/{{.PACKAGE_ROOT}}/" "{{.DECKY_PLUGIN_DIR}}/{{.PLUGIN_SLUG}}/"'
+      - 'touch "{{.DECKY_PLUGIN_DIR}}/{{.PLUGIN_SLUG}}/main.py"'
 
   clean:
     desc: Remove all generated build and package files

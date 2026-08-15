@@ -70,7 +70,7 @@ For live Linux development, also install [Air](https://github.com/air-verse/air)
 task dev
 ```
 
-The watcher uses non-interactive sudo. Add a narrowly scoped `visudo` rule for the exact `/usr/bin/rsync -a --delete <absolute-repository-path>/package/hv-launcher/ <decky-plugin-path>/` command before starting it. The watcher does not reload Decky Loader automatically.
+The watcher uses non-interactive sudo. Add a narrowly scoped `visudo` rule for the exact `/usr/bin/rsync -a --delete <absolute-repository-path>/package/hv-launcher/ <decky-plugin-path>/` command before starting it. After synchronization, the deploy task touches the installed `main.py` so Decky observes the revision and reloads the plugin.
 
 ### QAM visual fixtures
 
