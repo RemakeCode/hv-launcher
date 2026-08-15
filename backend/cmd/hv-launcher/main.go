@@ -19,8 +19,9 @@ import (
 	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
+	"hv-launcher/internal/linuwux/proton"
+	linuwuxruntime "hv-launcher/internal/linuwux/runtime"
 	backendlogger "hv-launcher/internal/logger"
-	"hv-launcher/internal/proton"
 	"hv-launcher/internal/server"
 	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/steamprocess"
@@ -52,8 +53,12 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		return proton.RunWorker(ctx, os.Stdin, os.Stdout)
+	case linuwuxruntime.WorkerCommand:
+		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+		defer stop()
+		return linuwuxruntime.RunWorker(ctx, os.Stdin, os.Stdout)
 	default:
-		return fmt.Errorf("unknown command %q (expected run, %s, or no command)", args[0], proton.WorkerCommand)
+		return fmt.Errorf("unknown command %q (expected run, %s, %s, or no command)", args[0], proton.WorkerCommand, linuwuxruntime.WorkerCommand)
 	}
 }
 
@@ -109,7 +114,11 @@ func serveBackend() error {
 
 	protonWorker, err := proton.NewWorkerClient(executable, userHome, int(userStat.Uid), int(userStat.Gid))
 	if err != nil {
-		return fmt.Errorf("configure unprivileged Proton worker: %w", err)
+		return fmt.Errorf("configure unprivileged LinUwUx Proton worker: %w", err)
+	}
+	runtimeWorker, err := linuwuxruntime.NewWorkerClient(executable, userHome, int(userStat.Uid), int(userStat.Gid))
+	if err != nil {
+		return fmt.Errorf("configure unprivileged LinUwUx runtime worker: %w", err)
 	}
 
 	kernelData, err := os.ReadFile("/proc/sys/kernel/osrelease")
@@ -137,16 +146,21 @@ func serveBackend() error {
 
 	inspector := system.NewInspector(userHome)
 	inspector.VerificationStore = verificationStore
+	inspector.Runtime = runtimeWorker
 	installer := cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{})
 	installer.Verifier = controller.TestModule
 
 	svc, err := server.New(server.Options{
-		Config:          store,
-		Inspector:       inspector,
-		Manager:         &shortcuts.Manager{Store: store, WrapperPath: executable},
+		Config:    store,
+		Inspector: inspector,
+		Manager: &shortcuts.Manager{
+			Store: store, WrapperPath: executable,
+			RuntimePath: filepath.Join(userHome, ".local", "bin", "linuwux"),
+		},
 		Controller:      controller,
 		Logger:          logger,
 		Proton:          protonWorker,
+		Runtime:         runtimeWorker,
 		Jobs:            setupJobs,
 		UMIP:            umip.NewInspector(umip.DefaultPaths()),
 		Capabilities:    capabilities,

@@ -18,8 +18,9 @@ import (
 	"hv-launcher/internal/cpuidmodule"
 	"hv-launcher/internal/hypervisor"
 	"hv-launcher/internal/jobs"
+	"hv-launcher/internal/linuwux/proton"
+	linuwuxruntime "hv-launcher/internal/linuwux/runtime"
 	"hv-launcher/internal/model"
-	"hv-launcher/internal/proton"
 	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
@@ -90,7 +91,15 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	inspector := &system.Inspector{Reader: system.OSReader{}, Runner: host, Paths: system.Paths{
 		CPUInfo: cpu, KernelRelease: kernel, ModulesRoot: modules, SteamRoots: []string{steamRoot},
 	}}
-	manager := &shortcuts.Manager{Store: store, WrapperPath: "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher"}
+	runtimeManager, err := linuwuxruntime.NewLocalManager(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	inspector.Runtime = runtimeManager
+	manager := &shortcuts.Manager{
+		Store: store, WrapperPath: "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher",
+		RuntimePath: filepath.Join(root, ".local", "bin", "linuwux"),
+	}
 	capabilities, err := auth.NewVerifier(testSetupSecret())
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +117,7 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	service, err := New(Options{
 		Config: store, Inspector: inspector, Manager: manager, Controller: controller,
 		ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc"),
-		Proton: proton.NewInstaller(root), Jobs: jobs.NewCoordinator(),
+		Proton: proton.NewInstaller(root), Runtime: runtimeManager, Jobs: jobs.NewCoordinator(),
 		UMIP:            umipInspector,
 		Capabilities:    capabilities,
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),

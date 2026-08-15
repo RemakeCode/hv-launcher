@@ -3,9 +3,11 @@ package shortcuts
 import (
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"hv-launcher/internal/config"
+	"hv-launcher/internal/linuwux"
 )
 
 func TestManagedLaunchValuePreservesLaunchForms(t *testing.T) {
@@ -43,6 +45,69 @@ func TestManagedLaunchValueRejectsNestedWrapper(t *testing.T) {
 	_, err := ManagedLaunchValue("/plugin/bin/hv-launcher run --app-id 42 -- %command%", "/wrapper", "42")
 	if !errors.Is(err, ErrAlreadyManaged) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestRuntimeManagedLaunchValueKeepsHVLauncherOutermost(t *testing.T) {
+	wrapper := "/home/deck/homebrew/plugins/hv-launcher/bin/hv-launcher"
+	runtime := "/home/deck/.local/bin/linuwux"
+	prefix := `'` + wrapper + `' run --app-id '42' -- '` + runtime + `' `
+	tests := []struct {
+		name     string
+		original string
+		expected string
+	}{
+		{"standard", "%command%", prefix + "%command%"},
+		{"empty", "", prefix + "%command%"},
+		{"arguments", "%command% --foo", prefix + "%command% --foo"},
+		{"environment", "MANGOHUD=1 %command% --foo", "MANGOHUD=1 " + prefix + "%command% --foo"},
+		{"mangohud", "mangohud %command%", prefix + "mangohud %command%"},
+		{"environment and mangohud", "MANGOHUD=1 mangohud %command%", "MANGOHUD=1 " + prefix + "mangohud %command%"},
+		{"quoted environment and mangohud", `MANGOHUD_CONFIG="fps_limit=60 30" mangohud %command%`, `MANGOHUD_CONFIG="fps_limit=60 30" ` + prefix + "mangohud %command%"},
+		{"lutris shortcut", "lutris:rungameid/2", prefix + "%command% lutris:rungameid/2"},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			actual, err := ManagedLaunchValueForMode(test.original, wrapper, "42", runtime, linuwux.ModeRuntime)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if actual != test.expected {
+				t.Fatalf("\ngot:  %s\nwant: %s", actual, test.expected)
+			}
+		})
+	}
+}
+
+func TestRuntimeManagedLaunchValueRequiresAbsoluteRuntime(t *testing.T) {
+	if _, err := ManagedLaunchValueForMode("%command%", "/wrapper", "42", "linuwux", linuwux.ModeRuntime); err == nil {
+		t.Fatal("relative runtime path was accepted")
+	}
+}
+
+func TestManagerReconfigureRejectsExternalLaunchEdit(t *testing.T) {
+	store, err := config.Open(filepath.Join(t.TempDir(), "settings"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	manager := &Manager{Store: store, WrapperPath: "/plugin/hv-launcher", RuntimePath: "/home/deck/.local/bin/linuwux"}
+	game, err := manager.EnableWithMode("42", "Game", true, "%command%", linuwux.ModeProton)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := manager.Reconfigure("42", "externally edited", linuwux.ModeRuntime); err == nil {
+		t.Fatal("external edit was replaced")
+	}
+	unchanged, _ := store.Game("42")
+	if unchanged.ManagedLaunch != game.ManagedLaunch || unchanged.Mode != linuwux.ModeProton {
+		t.Fatalf("record changed after conflict: %+v", unchanged)
+	}
+	updated, err := manager.Reconfigure("42", game.ManagedLaunch, linuwux.ModeRuntime)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Mode != linuwux.ModeRuntime || !strings.Contains(updated.ManagedLaunch, "'/home/deck/.local/bin/linuwux' %command%") {
+		t.Fatalf("runtime mode was not applied: %+v", updated)
 	}
 }
 

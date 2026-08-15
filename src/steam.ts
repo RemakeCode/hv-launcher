@@ -1,5 +1,5 @@
-import type { Configuration, Game } from "./types";
-import { disableGame, enableGame, getConfiguration, postLifetime } from "./api";
+import type { Configuration, Game, LinUwUxMode } from '@/types';
+import { disableGame, enableGame, getConfiguration, postLifetime, reconfigureGame } from '@/api';
 
 interface Unregisterable {
   unregister(): void;
@@ -63,7 +63,13 @@ export class SteamLibraryLoadingError extends Error {
 }
 
 function materializedStore(): MaterializedAppStore | undefined {
+  if (typeof window === 'undefined') return undefined;
   return window.appStore as unknown as MaterializedAppStore | undefined;
+}
+
+function detailsStore(): SteamDetailsStore | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return window.appDetailsStore;
 }
 
 export function discoverGames(
@@ -111,7 +117,7 @@ export function discoverGames(
 export async function readLaunchValue(
   game: Game,
   bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = window.appDetailsStore,
+  store: SteamDetailsStore | undefined = detailsStore(),
 ): Promise<string> {
   const appId = Number(game.appId);
   let details = store?.GetAppDetails(appId) ?? null;
@@ -153,9 +159,13 @@ export function setLaunchValue(game: Game, value: string, bridge: SteamBridge = 
   else bridge.Apps.SetAppLaunchOptions(Number(game.appId), value);
 }
 
-export async function enableManagedGame(game: Game, bridge: SteamBridge = SteamClient): Promise<void> {
+export async function enableManagedGame(
+  game: Game,
+  mode?: LinUwUxMode,
+  bridge: SteamBridge = SteamClient,
+): Promise<void> {
   const original = await readLaunchValue(game, bridge);
-  const managed = await enableGame(game.appId, game.name, game.shortcut, original);
+  const managed = await enableGame(game.appId, game.name, game.shortcut, original, mode);
   try {
     setLaunchValue(game, managed.managedLaunch, bridge);
   } catch (error) {
@@ -164,10 +174,35 @@ export async function enableManagedGame(game: Game, bridge: SteamBridge = SteamC
   }
 }
 
+export async function reconfigureManagedGame(
+  game: Game,
+  mode: LinUwUxMode,
+  bridge: SteamBridge = SteamClient,
+  store: SteamDetailsStore | undefined = detailsStore(),
+): Promise<void> {
+  const configuration = await getConfiguration();
+  const record = configuration.games[game.appId];
+  if (!record) throw new Error(`${game.name} is not managed.`);
+  const current = await readLaunchValue(game, bridge, store);
+  const previousMode = record.mode ?? "proton";
+  const managed = await reconfigureGame(game.appId, current, mode);
+  try {
+    setLaunchValue(game, managed.managedLaunch, bridge);
+  } catch (error) {
+    try {
+      await reconfigureGame(game.appId, managed.managedLaunch, previousMode);
+    } catch {
+      // Preserve the original Steam setter failure. A refresh will surface any
+      // backend conflict if the compensating request also failed.
+    }
+    throw error;
+  }
+}
+
 export async function disableManagedGame(
   game: Game,
   bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = window.appDetailsStore,
+  store: SteamDetailsStore | undefined = detailsStore(),
 ): Promise<void> {
   const config = await getConfiguration();
   const record = config.games[game.appId];

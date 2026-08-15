@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"hv-launcher/internal/jobs"
-	"hv-launcher/internal/proton"
+	"hv-launcher/internal/linuwux/proton"
 )
 
 const maxSetupPathBytes = 4_096

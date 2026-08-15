@@ -8,8 +8,9 @@ import {
   showModal
 } from '@decky/ui';
 import { useState, type Dispatch } from 'react';
-import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece } from 'react-icons/fa';
+import { FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
 import { installModuleArchive, testModule } from '@/api';
+import { ModulePreflightDetails } from '@/readiness-workspace/module-preflight-details';
 import { ReadinessItem } from '@/readiness/readiness-item';
 import { issueSetupCapability, MODULE_TEST_CAPABILITY_BINDING } from '@/setup-capability';
 import { setupEventStore } from '@/setup-events';
@@ -20,10 +21,6 @@ import type { Check, ModulePreflight, SystemStatus } from '@/types';
 import { isFilePickerCancellation } from '@/readiness-workspace/readiness-workspace-state';
 import type { ModuleDraft, ModuleDraftAction } from '@/readiness-workspace/readiness-workspace-state';
 
-const MODULE_PICKER_START_PATH = '/home';
-const SETUP_INTERRUPTION_WARNING =
-  'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until installation finishes. Interrupting DKMS setup may require manual cleanup before trying again.';
-
 interface ModuleSetupProps {
   check: Check;
   draft: ModuleDraft;
@@ -32,6 +29,14 @@ interface ModuleSetupProps {
   status: SystemStatus;
   onRefresh: () => Promise<void>;
   onDraft: Dispatch<ModuleDraftAction>;
+}
+
+const MODULE_PICKER_START_PATH = '/home';
+const SETUP_INTERRUPTION_WARNING =
+  'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until installation finishes. Interrupting DKMS setup may require manual cleanup before trying again.';
+
+function humanize(value: string): string {
+  return value.replaceAll('-', ' ');
 }
 
 export function ModuleSetup({ check, draft, preflight, mutationActive, status, onRefresh, onDraft }: ModuleSetupProps) {
@@ -268,37 +273,4 @@ export function ModuleSetup({ check, draft, preflight, mutationActive, status, o
       )}
     </PanelSection>
   );
-}
-
-function ModulePreflightDetails({ preflight }: { preflight: ModulePreflight }) {
-  return (
-    <>
-      <ReadinessItem
-        icon={preflight.ready ? FaCheckCircle : FaPuzzlePiece}
-        item={{
-          title: preflight.ready ? 'Host requirements ready' : 'Host requirements need attention',
-          detail: `${preflight.distributionId ?? 'Unknown distribution'} · kernel ${preflight.kernelRelease || 'unknown'}`,
-          state: preflight.ready ? 'success' : 'info'
-        }}
-      />
-      {preflight.dependencyPlan && (
-        <>
-          <Field
-            label='Reviewed dependency transaction'
-            description={`${preflight.dependencyPlan.manager}: ${preflight.dependencyPlan.packages.join(', ')}`}
-          />
-          {preflight.dependencyPlan.previewOutput && (
-            <Field label='Package manager preview' description={preflight.dependencyPlan.previewOutput} />
-          )}
-        </>
-      )}
-      {preflight.lockdown !== 'none' && preflight.lockdown !== 'unknown' && (
-        <Field label='Kernel lockdown (informational)' description={`${preflight.lockdown}; acceptance is determined by the guarded load test.`} />
-      )}
-    </>
-  );
-}
-
-function humanize(value: string): string {
-  return value.replaceAll('-', ' ');
 }

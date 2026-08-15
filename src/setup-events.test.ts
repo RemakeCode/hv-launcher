@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ManagedActivationFailure, SetupJobSnapshot } from "./types";
+import type { ManagedActivationFailure, SetupJobSnapshot } from '@/types';
 
 const { getActiveSetupJob, getSetupJob } = vi.hoisted(() => ({
   getActiveSetupJob: vi.fn(),
@@ -12,7 +12,7 @@ vi.mock("./api", () => ({
   getSetupJob,
 }));
 
-import { SetupEventStore } from "./setup-events";
+import { SetupEventStore } from '@/setup-events';
 
 class FakeEventStream {
   onopen: ((event: Event) => void) | null = null;
@@ -57,6 +57,14 @@ describe("plugin-lifetime setup events", () => {
   beforeEach(() => {
     getActiveSetupJob.mockReset();
     getSetupJob.mockReset();
+  });
+
+  it("continues without a live stream when EventSource is unavailable", () => {
+    vi.stubGlobal("EventSource", undefined);
+    const store = new SetupEventStore();
+
+    expect(() => store.start()).not.toThrow();
+    expect(store.current("proton-install")).toBeUndefined();
   });
 
   it("reconciles snapshots, updates subscribers, and deduplicates terminal notifications", async () => {

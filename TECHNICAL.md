@@ -8,6 +8,14 @@ This document explains the guided setup, runtime behavior, recovery model, and d
 
 Choose the archive you obtained, review the Steam installation, and confirm the source before installing. HV Launcher checks the archive structure but cannot prove where it came from. Existing Proton folders are never overwritten. Restart Steam after a successful install so it can discover the new tool.
 
+### LinUwUx runtime
+
+The runtime is an alternative LinUwUx integration method, not a Proton replacement. Runtime setup uses the Decky user's home and an unprivileged worker to install `~/.local/bin/linuwux` and `~/.local/lib/liblinuwux.so`; it never writes to `compatibilitytools.d` and does not require root. Games still need a compatible GE-Proton or CachyOS Proton selected in Steam. Official Valve Proton is not currently supported by the upstream runtime.
+
+Each user-triggered install, update, or repair resolves the latest stable `brcly/linuwux-runtime` GitHub release to one exact tag. The worker accepts no caller URL, downloads only `liblinuwux.so`, `linuwux.sh`, and `SHA256SUMS` from that tagged release, bounds each response, verifies the published payload checksums and any GitHub asset digests, and atomically activates the two runtime files. A failed operation keeps the prior valid installation. Update availability compares bounded `linuwux --version` output with the latest stable tag; checksum values validate downloads but do not identify the installed version. There are no automatic updates, offline asset picker, or runtime-removal controls in the initial implementation.
+
+The plugin package does not contain LinUwUx runtime assets. They remain separately licensed under AGPL-3.0-or-later and are acquired from upstream at setup time. The runtime panel links to [LinUwUx by brcly](https://github.com/brcly/linuwux-runtime), and packaging must preserve this source and license distinction.
+
 ### UMIP
 
 Supported Limine and GRUB configurations can be updated after confirmation. The change takes effect only after a reboot, and the readiness check remains blocked until the running system reports UMIP disabled. Unsupported bootloaders require manual setup. HV Launcher does not automatically undo a bootloader change.
@@ -42,13 +50,15 @@ When the game starts, a small launcher prepares the required CPU support and the
 
 If HV Launcher is unavailable, the shortcut still runs its original command without emulation. If HV Launcher is available but cannot safely prepare the system—for example, because KVM is in use—the game does not start and an error is reported.
 
+Managed games store an optional `proton` or `runtime` method. Legacy version-one records without a method continue to use their existing Proton launch value and are not rewritten during configuration loading. Runtime mode keeps HV Launcher as the outer process and starts the absolute user-scoped `linuwux` wrapper as its child immediately before Steam's game command. Changing the default affects only future enablement. Changing an existing game's method is allowed only while Steam still contains the exact last value HV Launcher applied.
+
 ### Module ownership and recovery
 
 HV Launcher never stops virtual machines. It records which module changes it made so it can safely restore them after a game or restart. If it cannot determine who made a change, it reports that recovery is required instead of changing the system. It also leaves CPUID emulation alone when it was already active before HV Launcher started.
 
 ### Local setup boundary
 
-Setup requests stay on the device and use fixed operations. Proton archive work runs with the Decky user's permissions. Bootloader, package, and DKMS changes require an explicit one-use confirmation from the plugin and cannot be turned into arbitrary commands or module names by a local request. Structural archive checks improve safety but do not replace trusting the source you selected.
+Setup requests stay on the device and use fixed operations. LinUwUx Proton archive work and runtime installation run with the Decky user's permissions through separate `linuwux-proton-worker` and `linuwux-runtime-worker` modes. Their request protocols remain independent because they validate different inputs and write to different user-owned destinations. Bootloader, package, and DKMS changes require an explicit one-use confirmation from the plugin and cannot be turned into arbitrary commands or module names by a local request. Structural archive checks improve safety but do not replace trusting the source you selected.
 
 ### Stored data
 
@@ -66,13 +76,13 @@ task package
 
 `task package` builds the frontend and Linux amd64 Go binary, then creates `package/hv-launcher.zip`. The archive contains one `hv-launcher/` plugin directory with `plugin.json`, the ESM marker in `package.json`, `main.py`, `dist/`, and `bin/hv-launcher`, ready for Decky Loader installation.
 
-For live Linux development, also install [Air](https://github.com/air-verse/air), then run `task dev`. Task deploys to `$HOME/homebrew/plugins/hv-launcher`. Air watches the Go backend while Task watches the frontend and plugin metadata. Successful builds recreate `package/hv-launcher` and deploy it with `sudo rsync`.
+For live Linux development, also install [Air](https://github.com/air-verse/air), then run `task dev`. Task deploys to `$HOME/homebrew/plugins/hv-launcher`. Air watches the Go backend while Task watches the frontend and plugin metadata. Successful builds recreate `package/hv-launcher` and deploy it with `sudo rsync`; the deploy task then touches the installed `main.py` so Decky observes the new revision and reloads the plugin.
 
 ```sh
 task dev
 ```
 
-The watcher uses non-interactive sudo. Add a narrowly scoped `visudo` rule for the exact `/usr/bin/rsync -a --delete <absolute-repository-path>/package/hv-launcher/ <decky-plugin-path>/` command before starting it. The watcher does not reload Decky Loader automatically.
+The watcher uses non-interactive sudo. Add a narrowly scoped `visudo` rule for the exact `/usr/bin/rsync -a --delete <absolute-repository-path>/package/hv-launcher/ <decky-plugin-path>/` command before starting it.
 
 ### QAM visual fixtures
 

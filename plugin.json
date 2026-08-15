@@ -1,10 +1,16 @@
 {
-    "name": "HV Launcher",
-    "author": "afk-RightNow",
-    "flags": ["root"],
-    "api_version": 1,
-    "publish": {
-        "tags": ["hypervisor", "readiness", "launcher"],
-        "description": "A quick readiness check and launch manager for those who need to manage the hypervisor"
-    }
+  "name": "HV Launcher",
+  "author": "afk-RightNow",
+  "flags": [
+    "root"
+  ],
+  "api_version": 1,
+  "publish": {
+    "tags": [
+      "hypervisor",
+      "readiness",
+      "launcher"
+    ],
+    "description": "A quick readiness check and launch manager for those who need to manage the hypervisor"
+  }
 }

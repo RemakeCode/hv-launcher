@@ -9,8 +9,13 @@ import {
   installModuleArchive,
   testModule,
   installProtonArchive,
+  getRuntimeSetupStatus,
+  installRuntime,
+  removeRuntime,
+  enableGame,
+  reconfigureGame,
   preflightProtonArchive,
-} from "./api";
+} from '@/api';
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -27,6 +32,77 @@ describe("backend errors", () => {
     await expect(getStatus()).rejects.toEqual(
       new BackendRequestError("KVM is busy", 423),
     );
+  });
+});
+
+describe("LinUwUx runtime and method API", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("uses fixed runtime inspection and user-triggered setup endpoints", async () => {
+    const setup = {
+      repository: "brcly/linuwux-runtime",
+      runtime: {
+        supported: true,
+        available: false,
+        state: "absent",
+        path: "/home/deck/.local/bin/linuwux",
+        libraryPath: "/home/deck/.local/lib/liblinuwux.so",
+        versionKnown: false,
+        updateState: "unknown",
+      },
+    };
+    const job = {
+      id: "runtime-job",
+      kind: "runtime-install",
+      state: "running",
+      phase: "resolving-release",
+      progress: 0,
+      output: [],
+      startedAt: "2026-08-14T12:00:00Z",
+    };
+    fetchMock
+      .mockResolvedValueOnce(new Response(JSON.stringify(setup)))
+      .mockResolvedValueOnce(new Response(JSON.stringify(job)));
+
+    await expect(getRuntimeSetupStatus()).resolves.toEqual(setup);
+    await expect(installRuntime("install")).resolves.toEqual(job);
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/setup/runtime`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/setup/runtime`, {
+      method: "POST",
+      body: JSON.stringify({ action: "install" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
+    await expect(removeRuntime()).resolves.toBeUndefined();
+    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/setup/runtime`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+  });
+
+  it("submits only per-game method fields", async () => {
+    fetchMock.mockImplementation(async () => new Response("{}"));
+    await enableGame("42", "Game", true, "%command%", "runtime");
+    await reconfigureGame("42", "managed", "proton");
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/games/42/enable`, {
+      method: "POST",
+      body: JSON.stringify({ name: "Game", shortcut: true, currentLaunch: "%command%", mode: "runtime" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/games/42/mode`, {
+      method: "POST",
+      body: JSON.stringify({ currentLaunch: "managed", mode: "proton" }),
+      headers: { "Content-Type": "application/json" },
+    });
   });
 });
 

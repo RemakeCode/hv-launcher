@@ -13,13 +13,13 @@ import (
 )
 
 const (
-	WorkerCommand         = "proton-worker"
+	WorkerCommand         = "linuwux-proton-worker"
 	maxWorkerRequestBytes = 16 << 10
 )
 
-// Operator is the user-scoped Proton work used by the HTTP service.
+// Manager is the user-scoped Proton setup work used by the HTTP service.
 // Production delegates it to WorkerClient; tests may use Installer directly.
-type Operator interface {
+type Manager interface {
 	PreflightPath(string) (Preflight, error)
 	Install(context.Context, string, string, ProgressFunc) (InstallResult, error)
 }
@@ -62,7 +62,7 @@ type WorkerClient struct {
 
 func NewWorkerClient(executable, userHome string, uid, gid int) (*WorkerClient, error) {
 	if executable == "" || !filepath.IsAbs(executable) {
-		return nil, errors.New("Proton worker executable must be an absolute path")
+		return nil, errors.New("LinUwUx Proton worker executable must be an absolute path")
 	}
 
 	if userHome == "" || !filepath.IsAbs(userHome) {
@@ -70,7 +70,7 @@ func NewWorkerClient(executable, userHome string, uid, gid int) (*WorkerClient, 
 	}
 
 	if uid <= 0 || gid <= 0 {
-		return nil, errors.New("Proton worker requires an unprivileged Decky user")
+		return nil, errors.New("LinUwUx Proton worker requires an unprivileged Decky user")
 	}
 
 	return &WorkerClient{Executable: executable, UserHome: userHome, UID: uid, GID: gid}, nil
@@ -85,7 +85,7 @@ func (c *WorkerClient) PreflightPath(archivePath string) (Preflight, error) {
 	}
 
 	if response.Preflight == nil {
-		return Preflight{}, errors.New("Proton worker returned no preflight result")
+		return Preflight{}, errors.New("LinUwUx Proton worker returned no preflight result")
 	}
 
 	return *response.Preflight, nil
@@ -101,7 +101,7 @@ func (c *WorkerClient) Install(ctx context.Context, archivePath, destinationID s
 	}
 
 	if response.Result == nil {
-		return InstallResult{}, errors.New("Proton worker returned no installation result")
+		return InstallResult{}, errors.New("LinUwUx Proton worker returned no installation result")
 	}
 
 	return *response.Result, nil
@@ -110,20 +110,20 @@ func (c *WorkerClient) Install(ctx context.Context, archivePath, destinationID s
 func (c *WorkerClient) run(ctx context.Context, request workerRequest, progress ProgressFunc) (workerResponse, error) {
 	payload, err := json.Marshal(request)
 	if err != nil {
-		return workerResponse{}, fmt.Errorf("encode Proton worker request: %w", err)
+		return workerResponse{}, fmt.Errorf("encode LinUwUx Proton worker request: %w", err)
 	}
 
 	command := c.command(ctx)
 	command.Stdin = bytes.NewReader(payload)
 	stdout, err := command.StdoutPipe()
 	if err != nil {
-		return workerResponse{}, fmt.Errorf("open Proton worker output: %w", err)
+		return workerResponse{}, fmt.Errorf("open LinUwUx Proton worker output: %w", err)
 	}
 
 	var stderr bytes.Buffer
 	command.Stderr = &stderr
 	if err := command.Start(); err != nil {
-		return workerResponse{}, fmt.Errorf("start Proton worker: %w", err)
+		return workerResponse{}, fmt.Errorf("start LinUwUx Proton worker: %w", err)
 	}
 
 	decoder := json.NewDecoder(stdout)
@@ -135,7 +135,7 @@ func (c *WorkerClient) run(ctx context.Context, request workerRequest, progress 
 		if err := decoder.Decode(&response); err != nil {
 			if !errors.Is(err, io.EOF) {
 				stopWorker(command, stdout)
-				return workerResponse{}, fmt.Errorf("decode Proton worker response: %w", err)
+				return workerResponse{}, fmt.Errorf("decode LinUwUx Proton worker response: %w", err)
 			}
 			break
 		}
@@ -153,10 +153,10 @@ func (c *WorkerClient) run(ctx context.Context, request workerRequest, progress 
 
 	if err := command.Wait(); err != nil {
 		if stderr.Len() > 0 {
-			return workerResponse{}, fmt.Errorf("Proton worker failed: %s", bytes.TrimSpace(stderr.Bytes()))
+			return workerResponse{}, fmt.Errorf("LinUwUx Proton worker failed: %s", bytes.TrimSpace(stderr.Bytes()))
 		}
 
-		return workerResponse{}, fmt.Errorf("Proton worker failed: %w", err)
+		return workerResponse{}, fmt.Errorf("LinUwUx Proton worker failed: %w", err)
 	}
 
 	if final.Error != "" {
@@ -189,11 +189,11 @@ func (c *WorkerClient) command(ctx context.Context) *exec.Cmd {
 func RunWorker(ctx context.Context, input io.Reader, output io.Writer) error {
 	payload, err := io.ReadAll(io.LimitReader(input, maxWorkerRequestBytes+1))
 	if err != nil {
-		return writeWorkerResponse(output, workerResponse{Error: "read Proton worker request: " + err.Error()})
+		return writeWorkerResponse(output, workerResponse{Error: "read LinUwUx Proton worker request: " + err.Error()})
 	}
 
 	if len(payload) > maxWorkerRequestBytes {
-		return writeWorkerResponse(output, workerResponse{Error: "Proton worker request is too large"})
+		return writeWorkerResponse(output, workerResponse{Error: "LinUwUx Proton worker request is too large"})
 	}
 
 	decoder := json.NewDecoder(bytes.NewReader(payload))
@@ -201,16 +201,16 @@ func RunWorker(ctx context.Context, input io.Reader, output io.Writer) error {
 	var request workerRequest
 
 	if err := decoder.Decode(&request); err != nil {
-		return writeWorkerResponse(output, workerResponse{Error: "decode Proton worker request: " + err.Error()})
+		return writeWorkerResponse(output, workerResponse{Error: "decode LinUwUx Proton worker request: " + err.Error()})
 	}
 
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		return writeWorkerResponse(output, workerResponse{Error: "decode Proton worker request: trailing data"})
+		return writeWorkerResponse(output, workerResponse{Error: "decode LinUwUx Proton worker request: trailing data"})
 	}
 
 	if request.UserHome == "" || !filepath.IsAbs(request.UserHome) ||
 		request.ArchivePath == "" || !filepath.IsAbs(request.ArchivePath) {
-		return writeWorkerResponse(output, workerResponse{Error: "Proton worker requires absolute user-home and archive paths"})
+		return writeWorkerResponse(output, workerResponse{Error: "LinUwUx Proton worker requires absolute user-home and archive paths"})
 	}
 
 	installer := NewInstaller(request.UserHome)
@@ -245,7 +245,7 @@ func RunWorker(ctx context.Context, input io.Reader, output io.Writer) error {
 
 		return writeWorkerResponse(output, workerResponse{Result: &result})
 	default:
-		return writeWorkerResponse(output, workerResponse{Error: "unknown Proton worker operation"})
+		return writeWorkerResponse(output, workerResponse{Error: "unknown LinUwUx Proton worker operation"})
 	}
 }
 

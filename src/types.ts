@@ -13,6 +13,12 @@ export interface Check {
   remedy?: string;
 }
 
+export interface ProtonStatus {
+  found: boolean;
+  tools: string[];
+  invalid?: Array<{ name: string; detail: string }>;
+}
+
 export interface SystemStatus {
   status: AggregateStatus;
   path: "native" | "hypervisor" | "none";
@@ -47,12 +53,32 @@ export interface SystemStatus {
     kvmBusy: boolean;
     controllerState: string;
   };
-  proton: {
-    found: boolean;
-    tools: string[];
-    invalid?: Array<{ name: string; detail: string }>;
-  };
+  proton: ProtonStatus;
+  linuwux: LinUwUxStatus;
   checks: Check[];
+}
+
+export type LinUwUxMode = "proton" | "runtime";
+export type RuntimeState = "absent" | "available" | "invalid" | "unsupported";
+export type RuntimeUpdateState = "unknown" | "current" | "update-available";
+
+export interface RuntimeStatus {
+  supported: boolean;
+  available: boolean;
+  state: RuntimeState;
+  path: string;
+  libraryPath: string;
+  version?: string;
+  versionKnown: boolean;
+  detail?: string;
+  updateState: RuntimeUpdateState;
+  latestVersion?: string;
+}
+
+export interface LinUwUxStatus {
+  available: boolean;
+  proton: ProtonStatus;
+  runtime: RuntimeStatus;
 }
 
 export type ModuleVerificationState = "pending" | "verified" | "failed";
@@ -89,6 +115,7 @@ export interface ManagedGame {
   originalLaunch: string;
   managedLaunch: string;
   wrapperPath: string;
+  mode?: LinUwUxMode;
 }
 
 export interface Configuration {
@@ -100,6 +127,28 @@ export interface ManageResponse {
   appId: string;
   managedLaunch: string;
   wrapperPath: string;
+  mode: LinUwUxMode;
+}
+
+export interface RuntimeRelease {
+  repository: string;
+  tag: string;
+  version: string;
+}
+
+export interface RuntimeSetupStatus {
+  runtime: RuntimeStatus;
+  repository: string;
+  latest?: RuntimeRelease;
+  updateError?: string;
+}
+
+export interface RuntimeInstallResult {
+  repository: string;
+  releaseTag: string;
+  version: string;
+  path: string;
+  libraryPath: string;
 }
 
 export type DisplayState = "idle" | "launching" | "running" | "stopping";
@@ -183,7 +232,7 @@ export interface SetupJobSnapshot {
   phase: string;
   progress: number;
   output: string[];
-  result?: ProtonInstallResult | UMIPApplyResult | ModuleInstallResult;
+  result?: ProtonInstallResult | RuntimeInstallResult | UMIPApplyResult | ModuleInstallResult;
   error?: string;
   startedAt: string;
   finishedAt?: string;

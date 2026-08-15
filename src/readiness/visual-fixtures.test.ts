@@ -5,7 +5,7 @@ import {
   getReadinessWorkspaceProtonFixture,
   getReadinessWorkspaceUMIPFixture,
   type VisualFixtureName
-} from './visual-fixtures';
+} from '@/readiness/visual-fixtures';
 
 const qamNames: ReadonlyArray<[VisualFixtureName, string]> = [
   ['native-ready', 'native-ready'],

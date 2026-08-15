@@ -1,11 +1,11 @@
-import { BASE_URL, getActiveSetupJob, getSetupJob } from "./api";
-import { logger } from "./shared/logger";
+import { BASE_URL, getActiveSetupJob, getSetupJob } from '@/api';
+import { logger } from '@/shared/logger';
 import type {
   ManagedActivationFailure,
   ManagedActivationFailureEvent,
   SetupJobEvent,
   SetupJobSnapshot,
-} from "./types";
+} from '@/types';
 
 type SetupListener = (job: SetupJobSnapshot) => void;
 type TerminalListener = (job: SetupJobSnapshot) => void;
@@ -20,6 +20,13 @@ interface EventStream {
 
 type EventStreamFactory = (url: string) => EventStream;
 
+function createEventStream(url: string): EventStream {
+  if (typeof EventSource === 'undefined') {
+    throw new Error('The Decky runtime does not provide EventSource.');
+  }
+  return new EventSource(url);
+}
+
 export class SetupEventStore {
   private source?: EventStream;
   private listeners = new Set<SetupListener>();
@@ -29,13 +36,20 @@ export class SetupEventStore {
   private activationFailureListeners = new Set<ActivationFailureListener>();
 
   constructor(
-    private readonly createStream: EventStreamFactory = (url) => new EventSource(url),
+    private readonly createStream: EventStreamFactory = createEventStream,
   ) {}
 
   start(onTerminal?: TerminalListener) {
     if (this.source) return;
     this.terminalListener = onTerminal;
-    const source = this.createStream(`${BASE_URL}/setup/events`);
+    let source: EventStream;
+    try {
+      source = this.createStream(`${BASE_URL}/setup/events`);
+    } catch (reason) {
+      logger.error('Failed to start the setup event stream', reason);
+      this.terminalListener = undefined;
+      return;
+    }
     this.source = source;
     source.addEventListener("setup-job", (event) => {
       try {

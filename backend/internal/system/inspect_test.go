@@ -182,7 +182,7 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 			t.Fatalf("got %s, want %s", status.Status, model.StatusHypervisorReady)
 		}
 		assertCheckOK(t, status.Checks, "emulation-module")
-		assertCheckOK(t, status.Checks, "proton")
+		assertCheckOK(t, status.Checks, "linuwux")
 	})
 
 	t.Run("pending verification is not ready even when signature metadata is present", func(t *testing.T) {
@@ -236,7 +236,7 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 		if status.Status != model.StatusSetupRequired {
 			t.Fatalf("got %s, want %s", status.Status, model.StatusSetupRequired)
 		}
-		assertCheckRemedy(t, status.Checks, "proton")
+		assertCheckRemedy(t, status.Checks, "linuwux")
 	})
 
 	t.Run("incompatible module requires setup", func(t *testing.T) {
@@ -260,6 +260,51 @@ func TestBasicReadinessOutcomes(t *testing.T) {
 		}
 		assertCheckRemedy(t, status.Checks, "emulation-module")
 	})
+}
+
+func TestLinUwUxMethodReadiness(t *testing.T) {
+	cpu := model.CPUStatus{
+		Vendor: "GenuineIntel", Architecture: "intel-gen4", Generation: "Intel 4th generation",
+		Supported: true, CPUIDFaultFlag: true,
+	}
+	kernel := model.KernelStatus{Release: "6.10.0", Major: 6, Minor: 10, Supported: true}
+	modules := model.ModuleStatus{ControllerState: "idle"}
+	proton := model.ProtonStatus{Found: true, Tools: []string{"GE-Proton-LinUwUx"}}
+	runtimeAvailable := model.RuntimeStatus{
+		Supported: true, Available: true, State: model.RuntimeStateAvailable,
+		Version: "26.08.14.1", VersionKnown: true, UpdateState: model.RuntimeUpdateUnknown,
+	}
+	runtimeAbsent := model.RuntimeStatus{Supported: true, State: model.RuntimeStateAbsent, UpdateState: model.RuntimeUpdateUnknown}
+	runtimeInvalid := model.RuntimeStatus{Supported: true, State: model.RuntimeStateInvalid, Detail: "library missing", UpdateState: model.RuntimeUpdateUnknown}
+
+	tests := []struct {
+		name          string
+		proton        model.ProtonStatus
+		runtime       model.RuntimeStatus
+		wantReady     bool
+		wantRuntimeOK bool
+	}{
+		{"proton only", proton, runtimeAbsent, true, false},
+		{"runtime only", model.ProtonStatus{}, runtimeAvailable, true, true},
+		{"both methods", proton, runtimeAvailable, true, true},
+		{"invalid runtime with proton", proton, runtimeInvalid, true, false},
+		{"neither", model.ProtonStatus{}, runtimeAbsent, false, false},
+		{"invalid runtime only", model.ProtonStatus{}, runtimeInvalid, false, false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			status := deriveStatusWithRuntime(cpu, kernel, model.PathNative, modules, test.proton, test.runtime, nil)
+			if got := status.Status == model.StatusNativeReady; got != test.wantReady {
+				t.Fatalf("status = %s", status.Status)
+			}
+			if status.LinUwUx.Runtime.Available != test.wantRuntimeOK {
+				t.Fatalf("LinUwUx status = %+v", status.LinUwUx)
+			}
+			if findCheck(status.Checks, "linuwux").OK != test.wantReady {
+				t.Fatalf("composite check = %+v", findCheck(status.Checks, "linuwux"))
+			}
+		})
+	}
 }
 
 func TestInspectProtonRejectsUnpatchedSunsetSLR(t *testing.T) {
