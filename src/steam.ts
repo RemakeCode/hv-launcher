@@ -1,5 +1,5 @@
-import type { Configuration, Game } from "./types";
-import { disableGame, enableGame, getConfiguration, postLifetime } from "./api";
+import type { Configuration, Game } from '@/types';
+import { disableGame, enableGame, getConfiguration, postLifetime } from '@/api';
 
 interface Unregisterable {
   unregister(): void;
@@ -63,7 +63,13 @@ export class SteamLibraryLoadingError extends Error {
 }
 
 function materializedStore(): MaterializedAppStore | undefined {
+  if (typeof window === 'undefined') return undefined;
   return window.appStore as unknown as MaterializedAppStore | undefined;
+}
+
+function detailsStore(): SteamDetailsStore | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return window.appDetailsStore;
 }
 
 export function discoverGames(
@@ -111,7 +117,7 @@ export function discoverGames(
 export async function readLaunchValue(
   game: Game,
   bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = window.appDetailsStore,
+  store: SteamDetailsStore | undefined = detailsStore(),
 ): Promise<string> {
   const appId = Number(game.appId);
   let details = store?.GetAppDetails(appId) ?? null;
@@ -167,7 +173,7 @@ export async function enableManagedGame(game: Game, bridge: SteamBridge = SteamC
 export async function disableManagedGame(
   game: Game,
   bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = window.appDetailsStore,
+  store: SteamDetailsStore | undefined = detailsStore(),
 ): Promise<void> {
   const config = await getConfiguration();
   const record = config.games[game.appId];
