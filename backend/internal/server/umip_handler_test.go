@@ -53,6 +53,7 @@ func TestUMIPInspectionReturnsReadOnlyRestartGuidance(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("inspection returned %d: %s", response.Code, response.Body.String())
 	}
+	requireUMIPInspectionContract(t, response.Body.Bytes())
 	var result umip.Inspection
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
@@ -107,6 +108,7 @@ func inspectUMIPEndpoint(t *testing.T, service *Service) umip.Inspection {
 	if response.Code != http.StatusOK {
 		t.Fatalf("inspection returned %d: %s", response.Code, response.Body.String())
 	}
+	requireUMIPInspectionContract(t, response.Body.Bytes())
 	var result umip.Inspection
 	if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
 		t.Fatal(err)
@@ -139,6 +141,7 @@ func TestUMIPApplyRequiresAndConsumesExactCapability(t *testing.T) {
 	if response.Code != http.StatusAccepted {
 		t.Fatalf("authorized apply returned %d: %s", response.Code, response.Body.String())
 	}
+	requireJobSnapshotContract(t, response.Body.Bytes())
 	var started jobs.JobSnapshot
 	if err := json.Unmarshal(response.Body.Bytes(), &started); err != nil {
 		t.Fatal(err)
@@ -260,8 +263,13 @@ func acceptedUMIPJob(t *testing.T, service *Service, response interface {
 		body, _ = io.ReadAll(result.Body)
 		t.Fatalf("apply returned %d: %s", result.StatusCode, body)
 	}
+	body, err := io.ReadAll(result.Body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	requireJobSnapshotContract(t, body)
 	var started jobs.JobSnapshot
-	if err := json.NewDecoder(result.Body).Decode(&started); err != nil {
+	if err := json.Unmarshal(body, &started); err != nil {
 		t.Fatal(err)
 	}
 	return waitForServerJob(t, service, started.ID)
@@ -306,6 +314,7 @@ func TestUMIPInspectionIncludesCurrentAndProposedConfiguration(t *testing.T) {
 	if response.Code != http.StatusOK {
 		t.Fatalf("inspection returned %d: %s", response.Code, response.Body.String())
 	}
+	requireUMIPInspectionContract(t, response.Body.Bytes())
 	var inspection umip.Inspection
 	if err := json.Unmarshal(response.Body.Bytes(), &inspection); err != nil {
 		t.Fatal(err)
@@ -324,5 +333,17 @@ func TestUMIPInspectionIncludesCurrentAndProposedConfiguration(t *testing.T) {
 	unsupported := perform(service.Handler(), http.MethodPost, "/v1/setup/umip", `{"bootloader":"systemd-boot","capability":"invalid"}`)
 	if unsupported.Code != http.StatusBadRequest {
 		t.Fatalf("apply accepted unsupported bootloader: %d %s", unsupported.Code, unsupported.Body.String())
+	}
+}
+
+func requireUMIPInspectionContract(t testing.TB, data []byte) {
+	t.Helper()
+	inspection := requireJSONObject(t, data, "liveUmip", "selection", "candidates", "manual")
+	for _, raw := range requireJSONArrayField(t, inspection, "candidates") {
+		candidate := requireJSONObject(t, raw, "bootloader", "configuration", "updater", "state", "currentValue", "proposedValue", "detail")
+		requireJSONObjectField(t, candidate, "updater", "path", "args")
+	}
+	for _, raw := range requireJSONArrayField(t, inspection, "manual") {
+		requireJSONObject(t, raw, "reason", "detail")
 	}
 }

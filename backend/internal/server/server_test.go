@@ -136,12 +136,26 @@ func testSetupSecret() []byte {
 
 func TestHandlerRoutesAndStrictRequests(t *testing.T) {
 	service, _, store, _ := newTestService(t)
-	for _, path := range []string{"/v1/status", "/v1/config"} {
-		response := perform(service.Handler(), http.MethodGet, path, "")
-		if response.Code != http.StatusOK {
-			t.Fatalf("%s returned %d: %s", path, response.Code, response.Body.String())
-		}
+	statusResponse := perform(service.Handler(), http.MethodGet, "/v1/status", "")
+	if statusResponse.Code != http.StatusOK {
+		t.Fatalf("status returned %d: %s", statusResponse.Code, statusResponse.Body.String())
 	}
+	status := requireJSONObject(t, statusResponse.Body.Bytes(), "status", "path", "cpu", "kernel", "modules", "proton", "checks")
+	requireJSONKeys(t, requireJSONObjectField(t, status, "cpu"), "vendor", "modelName", "architecture", "supported", "umipPresent", "umipRequiredOff", "cpuidFaultFlag")
+	requireJSONKeys(t, requireJSONObjectField(t, status, "modules"), "emulationInstalled", "emulationLoaded", "emulationCompatible", "kvmLoaded", "kvmAmdLoaded", "kvmBusy", "controllerState")
+	requireJSONKeys(t, requireJSONObjectField(t, status, "proton"), "found", "tools")
+	checks := requireJSONArrayField(t, status, "checks")
+	if len(checks) == 0 {
+		t.Fatal("status response has no readiness checks")
+	}
+	requireJSONObject(t, checks[0], "id", "ok", "label", "detail")
+
+	configurationResponse := perform(service.Handler(), http.MethodGet, "/v1/config", "")
+	if configurationResponse.Code != http.StatusOK {
+		t.Fatalf("configuration returned %d: %s", configurationResponse.Code, configurationResponse.Body.String())
+	}
+	requireJSONObject(t, configurationResponse.Body.Bytes(), "version", "games")
+
 	removed := perform(service.Handler(), http.MethodPost, "/v1/games/restore-all", `{}`)
 	if removed.Code != http.StatusNotFound {
 		t.Fatalf("removed restore-all route returned %d", removed.Code)
@@ -150,6 +164,7 @@ func TestHandlerRoutesAndStrictRequests(t *testing.T) {
 	if malformed.Code != http.StatusBadRequest {
 		t.Fatalf("unknown field returned %d: %s", malformed.Code, malformed.Body.String())
 	}
+	requireJSONObject(t, malformed.Body.Bytes(), "error")
 	unknown := perform(service.Handler(), http.MethodPost, "/v1/sessions", `{"appId":"999"}`)
 	if unknown.Code != http.StatusForbidden {
 		t.Fatalf("unknown App ID returned %d", unknown.Code)
@@ -209,6 +224,14 @@ func TestEnableDisableAndConflict(t *testing.T) {
 	if enabled.Code != http.StatusOK {
 		t.Fatalf("enable returned %d: %s", enabled.Code, enabled.Body.String())
 	}
+	requireJSONObject(t, enabled.Body.Bytes(), "appId", "managedLaunch", "wrapperPath")
+	configurationResponse := perform(service.Handler(), http.MethodGet, "/v1/config", "")
+	if configurationResponse.Code != http.StatusOK {
+		t.Fatalf("configuration returned %d: %s", configurationResponse.Code, configurationResponse.Body.String())
+	}
+	configuration := requireJSONObject(t, configurationResponse.Body.Bytes(), "version", "games")
+	games := requireJSONObjectField(t, configuration, "games")
+	requireJSONObjectField(t, games, "10", "appId", "name", "shortcut", "originalLaunch", "managedLaunch", "wrapperPath")
 	disabled := perform(service.Handler(), http.MethodPost, "/v1/games/10/disable", `{}`)
 	if disabled.Code != http.StatusNoContent {
 		t.Fatalf("disable returned %d: %s", disabled.Code, disabled.Body.String())

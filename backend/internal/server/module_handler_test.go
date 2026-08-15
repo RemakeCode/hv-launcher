@@ -14,6 +14,12 @@ func TestModulePreflightReturnsHostRequirementsWithoutArchiveInput(t *testing.T)
 	if response.Code != http.StatusOK {
 		t.Fatalf("module preflight returned %d: %s", response.Code, response.Body.String())
 	}
+	contract := requireJSONObject(t, response.Body.Bytes(), "ready", "kernelRelease", "lockdown", "controllerState", "checks")
+	checks := requireJSONArrayField(t, contract, "checks")
+	if len(checks) == 0 {
+		t.Fatal("module preflight response has no checks")
+	}
+	requireJSONObject(t, checks[0], "id", "ok", "detail")
 	var preflight cpuidmodule.Preflight
 	if err := json.Unmarshal(response.Body.Bytes(), &preflight); err != nil {
 		t.Fatal(err)

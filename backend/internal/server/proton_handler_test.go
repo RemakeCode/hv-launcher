@@ -40,6 +40,13 @@ func TestProtonInspectAndInstallAPI(t *testing.T) {
 	if strings.Contains(inspectionResponse.Body.String(), root) {
 		t.Fatalf("inspection response exposed a destination path: %s", inspectionResponse.Body.String())
 	}
+	inspectionContract := requireJSONObject(t, inspectionResponse.Body.Bytes(), "preflight", "responsibility")
+	preflightContract := requireJSONObjectField(t, inspectionContract, "preflight", "fileName", "compression", "compressedBytes", "destinations")
+	destinations := requireJSONArrayField(t, preflightContract, "destinations")
+	if len(destinations) == 0 {
+		t.Fatal("preflight response has no destinations")
+	}
+	requireJSONObject(t, destinations[0], "id", "label")
 	var inspected protonPreflightResponse
 	if err := json.Unmarshal(inspectionResponse.Body.Bytes(), &inspected); err != nil {
 		t.Fatal(err)
@@ -52,6 +59,7 @@ func TestProtonInspectAndInstallAPI(t *testing.T) {
 	if installResponse.Code != http.StatusAccepted {
 		t.Fatalf("install returned %d: %s", installResponse.Code, installResponse.Body.String())
 	}
+	requireJobSnapshotContract(t, installResponse.Body.Bytes())
 	var started jobs.JobSnapshot
 	if err := json.Unmarshal(installResponse.Body.Bytes(), &started); err != nil {
 		t.Fatal(err)
@@ -68,6 +76,7 @@ func TestProtonInspectAndInstallAPI(t *testing.T) {
 	if active.Code != http.StatusOK || !strings.Contains(active.Body.String(), `"active":false`) {
 		t.Fatalf("active snapshot = %d %s", active.Code, active.Body.String())
 	}
+	requireJSONObject(t, active.Body.Bytes(), "active")
 }
 
 func TestProtonInstallRejectsInvalidInputUnconfirmedSourceAndUnknownDestination(t *testing.T) {
@@ -86,6 +95,7 @@ func TestProtonInstallRejectsInvalidInputUnconfirmedSourceAndUnknownDestination(
 	if invalid.Code != http.StatusAccepted {
 		t.Fatalf("unknown destination did not start a rejecting job: %d: %s", invalid.Code, invalid.Body.String())
 	}
+	requireJobSnapshotContract(t, invalid.Body.Bytes())
 	var started jobs.JobSnapshot
 	if err := json.Unmarshal(invalid.Body.Bytes(), &started); err != nil {
 		t.Fatal(err)
@@ -103,6 +113,7 @@ func waitForServerJob(t *testing.T, service *Service, id string) jobs.JobSnapsho
 		if response.Code != http.StatusOK {
 			t.Fatalf("job snapshot returned %d: %s", response.Code, response.Body.String())
 		}
+		requireJobSnapshotContract(t, response.Body.Bytes())
 		var snapshot jobs.JobSnapshot
 		if err := json.Unmarshal(response.Body.Bytes(), &snapshot); err != nil {
 			t.Fatal(err)
