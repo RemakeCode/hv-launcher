@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -72,6 +73,60 @@ func TestJobOutputIsSanitizedAndBounded(t *testing.T) {
 		if strings.ContainsAny(line, "\x00\r\n") || len(line) > maxJobOutputLine {
 			t.Fatalf("output was not sanitized: %q", line)
 		}
+	}
+}
+
+func TestEmptyJobOutputSerializesAsArray(t *testing.T) {
+	coordinator := NewCoordinator()
+	started, err := coordinator.Start("proton-install", "starting", func(*Job) (any, error) {
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	encoded, err := json.Marshal(started)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var response struct {
+		Output []string `json:"output"`
+	}
+	if err := json.Unmarshal(encoded, &response); err != nil {
+		t.Fatal(err)
+	}
+	if response.Output == nil {
+		t.Fatalf("empty job output serialized as null: %s", encoded)
+	}
+}
+
+func TestClonedJobOutputDoesNotShareStorage(t *testing.T) {
+	coordinator := NewCoordinator()
+	ready := make(chan struct{})
+	release := make(chan struct{})
+	started, err := coordinator.Start("module-install", "starting", func(job *Job) (any, error) {
+		job.Output("first")
+		close(ready)
+		<-release
+		job.Output("second")
+		return nil, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-ready
+
+	cloned, ok := coordinator.Get(started.ID)
+	if !ok || len(cloned.Output) != 1 || cloned.Output[0] != "first" {
+		t.Fatalf("unexpected cloned output: %+v", cloned.Output)
+	}
+	close(release)
+	finished := waitForJob(t, coordinator, started.ID)
+	if len(cloned.Output) != 1 || cloned.Output[0] != "first" {
+		t.Fatalf("cloned output changed after coordinator update: %+v", cloned.Output)
+	}
+	if len(finished.Output) != 2 {
+		t.Fatalf("coordinator lost output after update: %+v", finished.Output)
 	}
 }
 
