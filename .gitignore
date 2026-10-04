@@ -14,3 +14,4 @@ openspec
 __pycache__
 docs
 .task
+.agents
