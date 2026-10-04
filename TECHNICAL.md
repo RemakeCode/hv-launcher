@@ -1,70 +1,33 @@
 # HV Launcher technical details
 
-This document explains the guided setup, runtime behavior, recovery model, and development workflow. See the [README](README.md) for installation and everyday use.
+See the [README](README.md) for installation and everyday use. This page summarizes setup, managed game behavior, and development.
 
-## Guided readiness setup
+## Setup
 
-### Proton
+- **LinUwUx Proton:** Install a selected archive into Steam after reviewing the destination. Existing folders are not overwritten. Restart Steam after installation.
+- **LinUwUx runtime:** HV Launcher detects an existing `~/.local/bin/linuwux` and `~/.local/share/linuwux/LinUwUx.so` for the configured Decky user. It checks file permissions and architecture but does not install, update, execute, or verify the runtime. Follow the upstream installation instructions.
+- **UMIP:** Supported Limine and GRUB setups can be changed after confirmation. Reboot to apply the change. Other bootloaders require manual setup.
+- **CPUID module:** HV Launcher can install the module for the running kernel through DKMS and test whether it loads. Review and trust the selected source before continuing. Unsupported distributions require manual setup.
 
-Choose the archive you obtained, review the Steam installation, and confirm the source before installing. HV Launcher checks the archive structure but cannot prove where it came from. Existing Proton folders are never overwritten. Restart Steam after a successful install so it can discover the new tool.
+## Managed games
 
-### LinUwUx runtime
+Enabling a shortcut saves its current Steam launch options and adds HV Launcher around them. The Steam target and working directory stay unchanged. Disabling restores the saved options while preserving edits made externally.
 
-Runtime support inspects the configured Decky user's existing `~/.local/bin/linuwux` and `~/.local/share/linuwux/LinUwUx.so`. Detection checks non-empty regular files, wrapper executable permissions, library readable permissions and x86-64 support. It does not execute the wrapper, check versions, download files, or modify the installation. Detection does not establish game compatibility or access from inside launcher sandboxes.
+HV Launcher prepares CPU support before starting the saved command and stays open for the game session, so Steam can track the normal launch and stop lifecycle. If HV Launcher is missing, the original command runs without emulation. If setup fails safely, the game does not start and an error is reported.
 
-The Readiness workspace links to upstream installation instructions alongside existing Proton setup. The runtime has no setup endpoint, worker, job, progress events, global default setting, or installation controls.
+Each managed game can use LinUwUx Proton or the LinUwUx runtime. Older settings without a method continue to use Proton. To change a method, disable the shortcut, select the method, and enable it again. Runtime launches keep HV Launcher outermost, followed by the LinUwUx wrapper and the original command. This preserves launch options such as Gamescope and leading environment assignments. There is no global method preference.
 
-### UMIP
+## CPU support and recovery
 
-Supported Limine and GRUB configurations can be updated after confirmation. The change takes effect only after a reboot, and the readiness check remains blocked until the running system reports UMIP disabled. Unsupported bootloaders require manual setup. HV Launcher does not automatically undo a bootloader change.
+When the kernel supports CPUID faulting, no module changes are needed at game launch. Otherwise, HV Launcher temporarily unloads AMD KVM modules, loads CPUID emulation, and restores KVM after the last managed game closes. It never stops virtual machines. If it cannot determine who changed module state, it asks for recovery rather than making an unsafe change.
 
-### CPUID module
+## Stored data and local setup
 
-Choose the `cpuid_fault_emulation` ZIP you obtained and review the exact host dependency transaction, if one is available. The module is built for the running kernel through DKMS. If that module and version are already registered, HV Launcher stops without replacing them.
-
-DKMS executes the reviewed `Makefile` as root, so continue only when you trust the source. The ZIP/source provenance warning is separate from the generated kernel module's signature metadata: a signer reported by `modinfo` only means that signature metadata is present, not that the running kernel trusts it. HV Launcher therefore runs a guarded **Test module** operation after installation and keeps that action available in Readiness. Only an actual key-rejection result recommends signing the generated module and enrolling or trusting its certificate through the distribution's MOK/key mechanism. Secure Boot and kernel lockdown are informational; they are not readiness gates.
-
-The last module-load outcome is stored separately from `config.json` and the transition journal as `cpuid-module-outcome.json`. It contains only a version, `pending`/`verified`/`failed` state, and bounded diagnostic/remediation text—never a module hash or kernel-release identity. A saved result is diagnostic and never skips a later guarded load.
-
-Supported mutable package families are CachyOS/Arch, Debian/Ubuntu/Mint, and Fedora/Nobara. Immutable or other distributions receive manual guidance instead of an automatic package transaction.
-
-## How it works
-
-### CPU support methods
-
-When the kernel provides CPUID faulting directly, HV Launcher does not need to change any system modules when a game starts.
-
-On systems that need emulation, HV Launcher performs these steps for a managed game:
-
-1. Temporarily unload the AMD KVM modules.
-2. Load and check the CPUID fault emulation module.
-3. When the last managed game closes, unload emulation and restore the KVM modules.
-
-### Game lifecycle
-
-Enabling a shortcut saves its current Steam launch options before adding HV Launcher. The shortcut target and working directory are not changed.
-
-When the game starts, a small launcher prepares the required CPU support and then runs the shortcut's original command. It stays active until the launcher or game closes so that Steam's normal `Play -> Launching -> Stop -> Play` behaviour is preserved. Heroic and Lutris shortcuts work as long as the process started by Steam remains open for the lifetime of the game.
-
-If HV Launcher is unavailable, the shortcut still runs its original command without emulation. If HV Launcher is available but cannot safely prepare the system—for example, because KVM is in use—the game does not start and an error is reported.
-
-Managed games store an optional `proton` or `runtime` method. Legacy version-one records without a method keep Proton behavior and are not rewritten on load. The selector sends an explicit per-game method when enabling. Method changes require disabling and enabling again, using the existing conflict-safe restoration rules. There is no global preference or method-update API. Runtime mode keeps the absolute HV Launcher executable outermost, then the absolute LinUwUx wrapper before the original command prefix, including Gamescope. Leading environment assignments remain outside the wrappers.
-
-### Module ownership and recovery
-
-HV Launcher never stops virtual machines. It records which module changes it made so it can safely restore them after a game or restart. If it cannot determine who made a change, it reports that recovery is required instead of changing the system. It also leaves CPUID emulation alone when it was already active before HV Launcher started.
-
-### Local setup boundary
-
-Setup requests stay on the device and use fixed operations. LinUwUx Proton archive work runs with the Decky user's permissions through `linuwux-proton-worker`. Runtime inspection only reads the configured user installation. Bootloader, package, and DKMS changes require an explicit one-use confirmation from the plugin and cannot be turned into arbitrary commands or module names by a local request. Structural archive checks improve safety but do not replace trusting the source you selected.
-
-### Stored data
-
-HV Launcher stores its game settings at `$XDG_DATA_HOME/hv-launcher/config.json`, or `~/.local/share/hv-launcher/config.json` when `XDG_DATA_HOME` is not set.
+Game settings are stored in `$XDG_DATA_HOME/hv-launcher/config.json`, or `~/.local/share/hv-launcher/config.json` by default. Setup operations run locally. System changes such as bootloader, package, and DKMS operations require confirmation in the plugin.
 
 ## Development
 
-Build requirements are Task, Go 1.23+, Node.js, and npm. Air is only required for the live Linux development workflow described below.
+Requirements: Task, Go 1.23+, Node.js, and npm.
 
 ```sh
 npm install
@@ -72,25 +35,17 @@ task test
 task package
 ```
 
-`task package` builds the frontend and Linux amd64 Go binary, then creates `package/hv-launcher.zip`. The archive contains one `hv-launcher/` plugin directory with `plugin.json`, the ESM marker in `package.json`, `main.py`, `dist/`, and `bin/hv-launcher`, ready for Decky Loader installation.
+`task package` builds the frontend and Linux amd64 backend, then creates `package/hv-launcher.zip` for Decky Loader.
 
-For live Linux development, also install [Air](https://github.com/air-verse/air), then run `task dev`. Task deploys to `$HOME/homebrew/plugins/hv-launcher`. Air watches the Go backend while Task watches the frontend and plugin metadata. Successful builds recreate `package/hv-launcher` and deploy it with `sudo rsync`; the deploy task then touches the installed `main.py` so Decky observes the new revision and reloads the plugin.
+For live Linux development, install [Air](https://github.com/air-verse/air) and run `task dev`. It watches the frontend and backend, then deploys the plugin to `$HOME/homebrew/plugins/hv-launcher`. The deploy task uses `sudo rsync`; configure a narrowly scoped `visudo` rule for the exact command shown by the task before running it.
 
-```sh
-task dev
-```
+## QAM visual fixtures
 
-The watcher uses non-interactive sudo. Add a narrowly scoped `visudo` rule for the exact `/usr/bin/rsync -a --delete <absolute-repository-path>/package/hv-launcher/ <decky-plugin-path>/` command before starting it.
-
-### QAM visual fixtures
-
-Build the frontend with spoofed readiness data to inspect QAM states on the real Decky UI without changing the backend:
+Build and deploy a fixture to inspect readiness states in Decky:
 
 ```sh
 task frontend:visual FIXTURE=hypervisor-ready
 task deploy
 ```
 
-Available fixtures are `native-ready`, `native-intel7`, `z1-extreme`, `z1-extreme-native`, `hypervisor-ready`, `setup-required`, `recovery-required`, and `unsupported`. The fixture affects only QAM status and configuration requests; shortcut management continues to use the backend. Run `task frontend` (or any normal build) and deploy again to disable the fixture.
-
-Readiness workspace process fixtures are also available when building with `FIXTURE=proton-confirm`, `FIXTURE=proton-installing`, `FIXTURE=proton-success`, `FIXTURE=umip-choice`, `FIXTURE=umip-existing`, `FIXTURE=module-review`, `FIXTURE=module-installing`, `FIXTURE=module-success`, `FIXTURE=module-signing`, `FIXTURE=module-failure`, or `FIXTURE=module-manual`.
+Available QAM fixtures: `native-ready`, `native-intel7`, `z1-extreme`, `z1-extreme-native`, `hypervisor-ready`, `setup-required`, `recovery-required`, and `unsupported`. Shortcut management continues to use backend data. A normal frontend build disables the fixture. Readiness workspace fixtures include Proton confirmation/install/success and UMIP/module review, progress, and result states.
