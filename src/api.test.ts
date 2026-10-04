@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BASE_URL,
   BackendRequestError,
@@ -9,267 +9,201 @@ import {
   installModuleArchive,
   testModule,
   installProtonArchive,
-  getRuntimeSetupStatus,
-  installRuntime,
-  removeRuntime,
   enableGame,
-  reconfigureGame,
-  preflightProtonArchive,
+  preflightProtonArchive
 } from '@/api';
 
 const fetchMock = vi.fn<typeof fetch>();
 
-describe("backend errors", () => {
+describe('backend errors', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("extracts the backend JSON error and status", async () => {
+  it('extracts the backend JSON error and status', async () => {
     fetchMock.mockResolvedValue(new Response('{"error":"KVM is busy"}', { status: 423 }));
 
-    await expect(getStatus()).rejects.toEqual(
-      new BackendRequestError("KVM is busy", 423),
-    );
+    await expect(getStatus()).rejects.toEqual(new BackendRequestError('KVM is busy', 423));
   });
 });
 
-describe("LinUwUx runtime and method API", () => {
+describe('Shortcut activation method API', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("uses fixed runtime inspection and user-triggered setup endpoints", async () => {
-    const setup = {
-      repository: "brcly/linuwux-runtime",
-      runtime: {
-        supported: true,
-        available: false,
-        state: "absent",
-        path: "/home/deck/.local/bin/linuwux",
-        libraryPath: "/home/deck/.local/lib/liblinuwux.so",
-        versionKnown: false,
-        updateState: "unknown",
-      },
-    };
-    const job = {
-      id: "runtime-job",
-      kind: "runtime-install",
-      state: "running",
-      phase: "resolving-release",
-      progress: 0,
-      output: [],
-      startedAt: "2026-08-14T12:00:00Z",
-    };
-    fetchMock
-      .mockResolvedValueOnce(new Response(JSON.stringify(setup)))
-      .mockResolvedValueOnce(new Response(JSON.stringify(job)));
-
-    await expect(getRuntimeSetupStatus()).resolves.toEqual(setup);
-    await expect(installRuntime("install")).resolves.toEqual(job);
-    expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/setup/runtime`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/setup/runtime`, {
-      method: "POST",
-      body: JSON.stringify({ action: "install" }),
-      headers: { "Content-Type": "application/json" },
-    });
-
-    fetchMock.mockResolvedValueOnce(new Response(null, { status: 204 }));
-    await expect(removeRuntime()).resolves.toBeUndefined();
-    expect(fetchMock).toHaveBeenNthCalledWith(3, `${BASE_URL}/setup/runtime`, {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-    });
-  });
-
-  it("submits only per-game method fields", async () => {
-    fetchMock.mockImplementation(async () => new Response("{}"));
-    await enableGame("42", "Game", true, "%command%", "runtime");
-    await reconfigureGame("42", "managed", "proton");
+  it('submits only per-game method fields', async () => {
+    fetchMock.mockImplementation(async () => new Response('{}'));
+    await enableGame('42', 'Game', true, '%command%', 'runtime');
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/games/42/enable`, {
-      method: "POST",
-      body: JSON.stringify({ name: "Game", shortcut: true, currentLaunch: "%command%", mode: "runtime" }),
-      headers: { "Content-Type": "application/json" },
-    });
-    expect(fetchMock).toHaveBeenNthCalledWith(2, `${BASE_URL}/games/42/mode`, {
-      method: "POST",
-      body: JSON.stringify({ currentLaunch: "managed", mode: "proton" }),
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      body: JSON.stringify({ name: 'Game', shortcut: true, currentLaunch: '%command%', mode: 'runtime' }),
+      headers: { 'Content-Type': 'application/json' }
     });
   });
 });
 
-describe("Proton setup API", () => {
+describe('Proton setup API', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("sends the selected path to the fixed preflight endpoint", async () => {
+  it('sends the selected path to the fixed preflight endpoint', async () => {
     const response = {
-      responsibility: "Confirm that you selected the intended archive.",
+      responsibility: 'Confirm that you selected the intended archive.',
       preflight: {
-        fileName: "GE-Proton11-1-LinUwUx.tar.xz",
-        compression: "xz",
+        fileName: 'GE-Proton11-1-LinUwUx.tar.xz',
+        compression: 'xz',
         compressedBytes: 1024,
-        destinations: [{ id: "native", label: "Steam" }],
-      },
+        destinations: [{ id: 'native', label: 'Steam' }]
+      }
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(response)));
 
-    await expect(
-      preflightProtonArchive("/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz"),
-    ).resolves.toEqual(response);
-    expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}/setup/proton/preflight`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          path: "/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz",
-        }),
-        headers: { "Content-Type": "application/json" },
-      },
+    await expect(preflightProtonArchive('/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz')).resolves.toEqual(
+      response
     );
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/proton/preflight`, {
+      method: 'POST',
+      body: JSON.stringify({
+        path: '/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz'
+      }),
+      headers: { 'Content-Type': 'application/json' }
+    });
   });
 
-  it("sends the selected path and destination with source confirmation", async () => {
+  it('sends the selected path and destination with source confirmation', async () => {
     const response = {
-      id: "job-1",
-      kind: "proton-install",
-      state: "running",
-      phase: "opening-archive",
+      id: 'job-1',
+      kind: 'proton-install',
+      state: 'running',
+      phase: 'opening-archive',
       progress: 5,
       output: [],
-      startedAt: "2026-07-19T12:00:00Z",
+      startedAt: '2026-07-19T12:00:00Z'
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(response)));
 
-    const path = "/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz";
-    await expect(installProtonArchive(path, "native")).resolves.toEqual(response);
+    const path = '/home/deck/Downloads/GE-Proton11-1-LinUwUx.tar.xz';
+    await expect(installProtonArchive(path, 'native')).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledOnce();
-    expect(fetchMock).toHaveBeenCalledWith(
-      `${BASE_URL}/setup/proton/install`,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          path,
-          destinationId: "native",
-          confirmedSource: true,
-        }),
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/proton/install`, {
+      method: 'POST',
+      body: JSON.stringify({
+        path,
+        destinationId: 'native',
+        confirmedSource: true
+      }),
+      headers: { 'Content-Type': 'application/json' }
+    });
   });
-
 });
 
-describe("UMIP setup API", () => {
+describe('UMIP setup API', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("uses the fixed inspection endpoint", async () => {
+  it('uses the fixed inspection endpoint', async () => {
     const inspection = {
       liveUmip: true,
-      selection: "automatic",
-      selected: "limine",
+      selection: 'automatic',
+      selected: 'limine',
       candidates: [],
-      manual: [],
+      manual: []
     };
     fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(inspection)));
     await expect(getUMIPInspection()).resolves.toEqual(inspection);
     expect(fetchMock).toHaveBeenLastCalledWith(`${BASE_URL}/setup/umip`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
     });
-
   });
 
-  it("submits only the selected bootloader and capability", async () => {
+  it('submits only the selected bootloader and capability', async () => {
     const job = {
-      id: "job-umip",
-      kind: "umip-apply",
-      state: "running",
-      phase: "starting",
+      id: 'job-umip',
+      kind: 'umip-apply',
+      state: 'running',
+      phase: 'starting',
       progress: 0,
       output: [],
-      startedAt: "2026-07-19T12:00:00Z",
+      startedAt: '2026-07-19T12:00:00Z'
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(job)));
 
-    await expect(applyUMIPConfiguration("grub", "signed-capability")).resolves.toEqual(job);
+    await expect(applyUMIPConfiguration('grub', 'signed-capability')).resolves.toEqual(job);
     expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/umip`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({
-        bootloader: "grub",
-        capability: "signed-capability",
+        bootloader: 'grub',
+        capability: 'signed-capability'
       }),
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' }
     });
   });
 });
 
-describe("CPUID module setup API", () => {
+describe('CPUID module setup API', () => {
   beforeEach(() => {
     fetchMock.mockReset();
-    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal('fetch', fetchMock);
   });
   afterEach(() => vi.unstubAllGlobals());
 
-  it("loads host preflight without sending an archive path", async () => {
-    const preflight = { ready: false, kernelRelease: "6.18", lockdown: "none", controllerState: "idle", checks: [] };
+  it('loads host preflight without sending an archive path', async () => {
+    const preflight = { ready: false, kernelRelease: '6.18', lockdown: 'none', controllerState: 'idle', checks: [] };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(preflight)));
     await expect(getModulePreflight()).resolves.toEqual(preflight);
     expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/module/preflight`, {
-      method: "GET",
-      headers: { "Content-Type": "application/json" },
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' }
     });
   });
 
-  it("submits only the selected archive path and capability", async () => {
+  it('submits only the selected archive path and capability', async () => {
     const job = {
-      id: "job-module",
-      kind: "module-install",
-      state: "running",
-      phase: "starting",
+      id: 'job-module',
+      kind: 'module-install',
+      state: 'running',
+      phase: 'starting',
       progress: 0,
       output: [],
-      startedAt: "2026-07-19T12:00:00Z",
+      startedAt: '2026-07-19T12:00:00Z'
     };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(job)));
 
     await expect(
-      installModuleArchive("/home/deck/Downloads/cpuid_fault_emulation.zip", "signed-capability"),
+      installModuleArchive('/home/deck/Downloads/cpuid_fault_emulation.zip', 'signed-capability')
     ).resolves.toEqual(job);
     expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/module/install`, {
-      method: "POST",
+      method: 'POST',
       body: JSON.stringify({
-        path: "/home/deck/Downloads/cpuid_fault_emulation.zip",
-        capability: "signed-capability",
+        path: '/home/deck/Downloads/cpuid_fault_emulation.zip',
+        capability: 'signed-capability'
       }),
-      headers: { "Content-Type": "application/json" },
+      headers: { 'Content-Type': 'application/json' }
     });
   });
 
-  it("uses the fixed module-test operation without caller parameters", async () => {
-    const response = { outcome: { state: "verified" } };
+  it('uses the fixed module-test operation without caller parameters', async () => {
+    const response = { outcome: { state: 'verified' } };
     fetchMock.mockResolvedValue(new Response(JSON.stringify(response)));
-    await expect(testModule("signed-capability")).resolves.toEqual(response);
+    await expect(testModule('signed-capability')).resolves.toEqual(response);
     expect(fetchMock).toHaveBeenCalledWith(`${BASE_URL}/setup/module/test`, {
-      method: "POST",
-      body: JSON.stringify({ capability: "signed-capability" }),
-      headers: { "Content-Type": "application/json" },
+      method: 'POST',
+      body: JSON.stringify({ capability: 'signed-capability' }),
+      headers: { 'Content-Type': 'application/json' }
     });
   });
 });

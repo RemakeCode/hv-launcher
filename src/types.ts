@@ -1,9 +1,5 @@
 export type AggregateStatus =
-  | "native-ready"
-  | "hypervisor-ready"
-  | "setup-required"
-  | "recovery-required"
-  | "unsupported";
+  'native-ready' | 'hypervisor-ready' | 'setup-required' | 'recovery-required' | 'unsupported';
 
 export interface Check {
   id: string;
@@ -21,7 +17,7 @@ export interface ProtonStatus {
 
 export interface SystemStatus {
   status: AggregateStatus;
-  path: "native" | "hypervisor" | "none";
+  path: 'native' | 'hypervisor' | 'none';
   cpu: {
     vendor: string;
     modelName: string;
@@ -54,13 +50,12 @@ export interface SystemStatus {
     controllerState: string;
   };
   proton: ProtonStatus;
-  linuwux: LinUwUxStatus;
+  linuwux?: LinUwUxStatus;
   checks: Check[];
 }
 
-export type LinUwUxMode = "proton" | "runtime";
-export type RuntimeState = "absent" | "available" | "invalid" | "unsupported";
-export type RuntimeUpdateState = "unknown" | "current" | "update-available";
+export type LinUwUxMode = 'proton' | 'runtime';
+export type RuntimeState = 'absent' | 'available' | 'invalid' | 'unsupported';
 
 export interface RuntimeStatus {
   supported: boolean;
@@ -68,11 +63,7 @@ export interface RuntimeStatus {
   state: RuntimeState;
   path: string;
   libraryPath: string;
-  version?: string;
-  versionKnown: boolean;
   detail?: string;
-  updateState: RuntimeUpdateState;
-  latestVersion?: string;
 }
 
 export interface LinUwUxStatus {
@@ -81,11 +72,8 @@ export interface LinUwUxStatus {
   runtime: RuntimeStatus;
 }
 
-export type ModuleVerificationState = "pending" | "verified" | "failed";
-export type ModuleVerificationClassification =
-  | "activation-failure"
-  | "signature-key-rejection"
-  | "blocked";
+export type ModuleVerificationState = 'pending' | 'verified' | 'failed';
+export type ModuleVerificationClassification = 'activation-failure' | 'signature-key-rejection' | 'blocked';
 
 export interface ModuleVerificationOutcome {
   state: ModuleVerificationState;
@@ -130,30 +118,9 @@ export interface ManageResponse {
   mode: LinUwUxMode;
 }
 
-export interface RuntimeRelease {
-  repository: string;
-  tag: string;
-  version: string;
-}
+export type DisplayState = 'idle' | 'launching' | 'running' | 'stopping';
 
-export interface RuntimeSetupStatus {
-  runtime: RuntimeStatus;
-  repository: string;
-  latest?: RuntimeRelease;
-  updateError?: string;
-}
-
-export interface RuntimeInstallResult {
-  repository: string;
-  releaseTag: string;
-  version: string;
-  path: string;
-  libraryPath: string;
-}
-
-export type DisplayState = "idle" | "launching" | "running" | "stopping";
-
-export type ProtonCompression = "gzip" | "xz";
+export type ProtonCompression = 'gzip' | 'xz';
 
 export interface ProtonDestination {
   id: string;
@@ -179,9 +146,9 @@ export interface ProtonInstallResult {
   restartSteam: boolean;
 }
 
-export type UMIPBootloader = "limine" | "grub";
-export type UMIPSelectionMode = "automatic" | "choice-required" | "manual-only";
-export type UMIPCandidateState = "action-required" | "restart-required" | "configured";
+export type UMIPBootloader = 'limine' | 'grub';
+export type UMIPSelectionMode = 'automatic' | 'choice-required' | 'manual-only';
+export type UMIPCandidateState = 'action-required' | 'restart-required' | 'configured';
 
 export interface UMIPUpdater {
   path: string;
@@ -201,11 +168,7 @@ export interface UMIPCandidate {
 
 export interface UMIPManualOutcome {
   bootloader?: UMIPBootloader;
-  reason:
-    | "unsupported-syntax"
-    | "missing-updater"
-    | "conflicting-argument"
-    | "unsupported-bootloader";
+  reason: 'unsupported-syntax' | 'missing-updater' | 'conflicting-argument' | 'unsupported-bootloader';
   detail: string;
 }
 
@@ -223,7 +186,7 @@ export interface UMIPApplyResult {
   backupRetained?: string;
 }
 
-export type SetupJobState = "running" | "succeeded" | "failed";
+export type SetupJobState = 'running' | 'succeeded' | 'failed';
 
 export interface SetupJobSnapshot {
   id: string;
@@ -232,7 +195,7 @@ export interface SetupJobSnapshot {
   phase: string;
   progress: number;
   output: string[];
-  result?: ProtonInstallResult | RuntimeInstallResult | UMIPApplyResult | ModuleInstallResult;
+  result?: ProtonInstallResult | UMIPApplyResult | ModuleInstallResult;
   error?: string;
   startedAt: string;
   finishedAt?: string;
@@ -301,7 +264,7 @@ export interface ActiveSetupJob {
 }
 
 export interface SetupJobEvent {
-  type: "setup-job";
+  type: 'setup-job';
   job: SetupJobSnapshot;
 }
 
@@ -315,6 +278,6 @@ export interface ManagedActivationFailure {
 }
 
 export interface ManagedActivationFailureEvent {
-  type: "managed-activation-failure";
+  type: 'managed-activation-failure';
   activationFailure: ManagedActivationFailure;
 }

@@ -80,27 +80,6 @@ func (m *Manager) EnableWithMode(appID, name string, shortcut bool, currentLaunc
 	return game, nil
 }
 
-func (m *Manager) Reconfigure(appID, currentLaunch string, mode linuwux.Mode) (model.ManagedGame, error) {
-	game, exists := m.Store.Game(appID)
-	if !exists {
-		return model.ManagedGame{}, fmt.Errorf("App ID %s is not managed", appID)
-	}
-	if currentLaunch != game.ManagedLaunch {
-		return model.ManagedGame{}, errors.New("Steam launch options changed outside HV Launcher; disable and re-enable management before changing methods")
-	}
-	managed, err := ManagedLaunchValueForMode(game.OriginalLaunch, m.WrapperPath, appID, m.RuntimePath, mode)
-	if err != nil {
-		return model.ManagedGame{}, err
-	}
-	game.ManagedLaunch = managed
-	game.WrapperPath = m.WrapperPath
-	game.Mode = mode
-	if err := m.Store.PutGame(game); err != nil {
-		return model.ManagedGame{}, err
-	}
-	return game, nil
-}
-
 func (m *Manager) Disable(appID string) error {
 	_, exists := m.Store.Game(appID)
 	if !exists {

@@ -125,59 +125,19 @@ const (
 	RuntimeStateUnsupported RuntimeState = "unsupported"
 )
 
-type RuntimeUpdateState string
-
-const (
-	RuntimeUpdateUnknown   RuntimeUpdateState = "unknown"
-	RuntimeUpdateCurrent   RuntimeUpdateState = "current"
-	RuntimeUpdateAvailable RuntimeUpdateState = "update-available"
-)
-
 type RuntimeStatus struct {
-	Supported     bool               `json:"supported"`
-	Available     bool               `json:"available"`
-	State         RuntimeState       `json:"state"`
-	Path          string             `json:"path"`
-	LibraryPath   string             `json:"libraryPath"`
-	Version       string             `json:"version,omitempty"`
-	VersionKnown  bool               `json:"versionKnown"`
-	Detail        string             `json:"detail,omitempty"`
-	UpdateState   RuntimeUpdateState `json:"updateState"`
-	LatestVersion string             `json:"latestVersion,omitempty"`
+	Supported   bool         `json:"supported"`
+	Available   bool         `json:"available"`
+	State       RuntimeState `json:"state"`
+	Path        string       `json:"path"`
+	LibraryPath string       `json:"libraryPath"`
+	Detail      string       `json:"detail,omitempty"`
 }
 
 type LinUwUxStatus struct {
 	Available bool          `json:"available"`
 	Proton    ProtonStatus  `json:"proton"`
 	Runtime   RuntimeStatus `json:"runtime"`
-}
-
-type RuntimeReleaseAsset struct {
-	Name   string `json:"name"`
-	URL    string `json:"-"`
-	Digest string `json:"-"`
-}
-
-type RuntimeRelease struct {
-	Repository string                         `json:"repository"`
-	Tag        string                         `json:"tag"`
-	Version    string                         `json:"version"`
-	Assets     map[string]RuntimeReleaseAsset `json:"-"`
-}
-
-type RuntimeSetupStatus struct {
-	Runtime     RuntimeStatus   `json:"runtime"`
-	Repository  string          `json:"repository"`
-	Latest      *RuntimeRelease `json:"latest,omitempty"`
-	UpdateError string          `json:"updateError,omitempty"`
-}
-
-type RuntimeInstallResult struct {
-	Repository  string `json:"repository"`
-	ReleaseTag  string `json:"releaseTag"`
-	Version     string `json:"version"`
-	Path        string `json:"path"`
-	LibraryPath string `json:"libraryPath"`
 }
 
 type InvalidProtonTool struct {
@@ -222,11 +182,6 @@ type ManageGameResponse struct {
 	AppID         string       `json:"appId"`
 	ManagedLaunch string       `json:"managedLaunch"`
 	WrapperPath   string       `json:"wrapperPath"`
-	Mode          linuwux.Mode `json:"mode"`
-}
-
-type ReconfigureGameRequest struct {
-	CurrentLaunch string       `json:"currentLaunch"`
 	Mode          linuwux.Mode `json:"mode"`
 }
 

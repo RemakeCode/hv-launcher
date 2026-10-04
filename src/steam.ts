@@ -1,5 +1,5 @@
 import type { Configuration, Game, LinUwUxMode } from '@/types';
-import { disableGame, enableGame, getConfiguration, postLifetime, reconfigureGame } from '@/api';
+import { disableGame, enableGame, getConfiguration, postLifetime } from '@/api';
 
 interface Unregisterable {
   unregister(): void;
@@ -74,7 +74,7 @@ function detailsStore(): SteamDetailsStore | undefined {
 
 export function discoverGames(
   configuration: Configuration,
-  store: MaterializedAppStore | undefined = materializedStore(),
+  store: MaterializedAppStore | undefined = materializedStore()
 ): Game[] {
   if (!store?.m_bIsInitialized || !Array.isArray(store.allApps)) {
     throw new SteamLibraryLoadingError();
@@ -95,7 +95,7 @@ export function discoverGames(
       name: app.display_name,
       shortcut,
       enabled: configuration.games[appId] !== undefined,
-      running: normalizeDisplayState(overviewDisplayStatus(app)) !== "idle",
+      running: normalizeDisplayState(overviewDisplayStatus(app)) !== 'idle'
     });
   }
 
@@ -107,7 +107,7 @@ export function discoverGames(
         shortcut: record.shortcut,
         enabled: true,
         running: false,
-        missing: true,
+        missing: true
       });
     }
   }
@@ -117,7 +117,7 @@ export function discoverGames(
 export async function readLaunchValue(
   game: Game,
   bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = detailsStore(),
+  store: SteamDetailsStore | undefined = detailsStore()
 ): Promise<string> {
   const appId = Number(game.appId);
   let details = store?.GetAppDetails(appId) ?? null;
@@ -149,9 +149,7 @@ export async function readLaunchValue(
       }
     });
   }
-  return game.shortcut
-    ? details.strShortcutLaunchOptions ?? ""
-    : details.strLaunchOptions ?? "";
+  return game.shortcut ? (details.strShortcutLaunchOptions ?? '') : (details.strLaunchOptions ?? '');
 }
 
 export function setLaunchValue(game: Game, value: string, bridge: SteamBridge = SteamClient): void {
@@ -162,7 +160,7 @@ export function setLaunchValue(game: Game, value: string, bridge: SteamBridge = 
 export async function enableManagedGame(
   game: Game,
   mode?: LinUwUxMode,
-  bridge: SteamBridge = SteamClient,
+  bridge: SteamBridge = SteamClient
 ): Promise<void> {
   const original = await readLaunchValue(game, bridge);
   const managed = await enableGame(game.appId, game.name, game.shortcut, original, mode);
@@ -174,35 +172,10 @@ export async function enableManagedGame(
   }
 }
 
-export async function reconfigureManagedGame(
-  game: Game,
-  mode: LinUwUxMode,
-  bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = detailsStore(),
-): Promise<void> {
-  const configuration = await getConfiguration();
-  const record = configuration.games[game.appId];
-  if (!record) throw new Error(`${game.name} is not managed.`);
-  const current = await readLaunchValue(game, bridge, store);
-  const previousMode = record.mode ?? "proton";
-  const managed = await reconfigureGame(game.appId, current, mode);
-  try {
-    setLaunchValue(game, managed.managedLaunch, bridge);
-  } catch (error) {
-    try {
-      await reconfigureGame(game.appId, managed.managedLaunch, previousMode);
-    } catch {
-      // Preserve the original Steam setter failure. A refresh will surface any
-      // backend conflict if the compensating request also failed.
-    }
-    throw error;
-  }
-}
-
 export async function disableManagedGame(
   game: Game,
   bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = detailsStore(),
+  store: SteamDetailsStore | undefined = detailsStore()
 ): Promise<void> {
   const config = await getConfiguration();
   const record = config.games[game.appId];
@@ -226,7 +199,7 @@ export async function disableManagedGame(
   }
 }
 
-export function displayState(appId: string): "idle" | "launching" | "running" | "stopping" {
+export function displayState(appId: string): 'idle' | 'launching' | 'running' | 'stopping' {
   const overview = materializedStore()?.GetAppOverviewByAppID(Number(appId));
   return normalizeDisplayState(overview ? overviewDisplayStatus(overview) : undefined);
 }
@@ -239,11 +212,11 @@ function overviewDisplayStatus(overview: MaterializedAppOverview): number | unde
   );
 }
 
-function normalizeDisplayState(status: number | undefined): "idle" | "launching" | "running" | "stopping" {
-  if (status === 1) return "launching";
-  if (status === 4) return "running";
-  if (status === 36) return "stopping";
-  return "idle";
+function normalizeDisplayState(status: number | undefined): 'idle' | 'launching' | 'running' | 'stopping' {
+  if (status === 1) return 'launching';
+  if (status === 4) return 'running';
+  if (status === 36) return 'stopping';
+  return 'idle';
 }
 
 type TimerHandle = number | ReturnType<typeof setTimeout>;
@@ -268,11 +241,14 @@ export function observeSteamLifetime(options: LifetimeObserverOptions = {}): () 
       if (!active) return;
       void send(String(notification.unAppID), notification.nInstanceID, notification.bRunning)
         .then((result) => {
-          if (active && notification.unAppID === 0 && result?.status === "unresolved" && attempt < 3) {
-            const handle = schedule(() => {
-              timers.delete(handle);
-              forward(attempt + 1);
-            }, 250 * 2 ** attempt);
+          if (active && notification.unAppID === 0 && result?.status === 'unresolved' && attempt < 3) {
+            const handle = schedule(
+              () => {
+                timers.delete(handle);
+                forward(attempt + 1);
+              },
+              250 * 2 ** attempt
+            );
             timers.add(handle);
           }
         })
@@ -290,10 +266,7 @@ export function observeSteamLifetime(options: LifetimeObserverOptions = {}): () 
   };
 }
 
-export function observeSteamOverviews(
-  onOverview: () => void,
-  bridge: SteamBridge = SteamClient,
-): () => void {
+export function observeSteamOverviews(onOverview: () => void, bridge: SteamBridge = SteamClient): () => void {
   const registration = bridge.Apps.RegisterForAppOverviewChanges?.(() => onOverview());
   return () => registration?.unregister();
 }

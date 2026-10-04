@@ -3,7 +3,6 @@ package shortcuts
 import (
 	"errors"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"hv-launcher/internal/config"
@@ -58,6 +57,7 @@ func TestRuntimeManagedLaunchValueKeepsHVLauncherOutermost(t *testing.T) {
 		expected string
 	}{
 		{"standard", "%command%", prefix + "%command%"},
+		{"gamescope", "PROTON_AVX=1 gamescope -f -- %command% --foo", "PROTON_AVX=1 " + prefix + "gamescope -f -- %command% --foo"},
 		{"empty", "", prefix + "%command%"},
 		{"arguments", "%command% --foo", prefix + "%command% --foo"},
 		{"environment", "MANGOHUD=1 %command% --foo", "MANGOHUD=1 " + prefix + "%command% --foo"},
@@ -82,32 +82,6 @@ func TestRuntimeManagedLaunchValueKeepsHVLauncherOutermost(t *testing.T) {
 func TestRuntimeManagedLaunchValueRequiresAbsoluteRuntime(t *testing.T) {
 	if _, err := ManagedLaunchValueForMode("%command%", "/wrapper", "42", "linuwux", linuwux.ModeRuntime); err == nil {
 		t.Fatal("relative runtime path was accepted")
-	}
-}
-
-func TestManagerReconfigureRejectsExternalLaunchEdit(t *testing.T) {
-	store, err := config.Open(filepath.Join(t.TempDir(), "settings"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	manager := &Manager{Store: store, WrapperPath: "/plugin/hv-launcher", RuntimePath: "/home/deck/.local/bin/linuwux"}
-	game, err := manager.EnableWithMode("42", "Game", true, "%command%", linuwux.ModeProton)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := manager.Reconfigure("42", "externally edited", linuwux.ModeRuntime); err == nil {
-		t.Fatal("external edit was replaced")
-	}
-	unchanged, _ := store.Game("42")
-	if unchanged.ManagedLaunch != game.ManagedLaunch || unchanged.Mode != linuwux.ModeProton {
-		t.Fatalf("record changed after conflict: %+v", unchanged)
-	}
-	updated, err := manager.Reconfigure("42", game.ManagedLaunch, linuwux.ModeRuntime)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if updated.Mode != linuwux.ModeRuntime || !strings.Contains(updated.ManagedLaunch, "'/home/deck/.local/bin/linuwux' %command%") {
-		t.Fatalf("runtime mode was not applied: %+v", updated)
 	}
 }
 

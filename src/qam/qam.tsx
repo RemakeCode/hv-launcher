@@ -95,8 +95,8 @@ function checkDetail(check: Check, status: SystemStatus): ReactNode {
     return 'Module ownership recovery is required before CPUID readiness can be evaluated.';
   }
   if (check.id === 'linuwux') {
-    const protonBuilds = status.linuwux.proton.tools.length;
-    const runtimeAvailable = status.linuwux.runtime.available;
+    const protonBuilds = (status.linuwux?.proton ?? status.proton).tools.length;
+    const runtimeAvailable = status.linuwux?.runtime?.available === true;
     if (protonBuilds > 0 || runtimeAvailable) {
       return (
         <>

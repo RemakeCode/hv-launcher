@@ -48,12 +48,12 @@ func (i *Inspector) Inspect(ctx context.Context, controllerState string) (model.
 		return model.SystemStatus{}, moduleErr
 	}
 	proton := i.inspectProton()
-	runtimeStatus := model.RuntimeStatus{State: model.RuntimeStateAbsent, UpdateState: model.RuntimeUpdateUnknown}
+	runtimeStatus := model.RuntimeStatus{State: model.RuntimeStateAbsent}
 	if i.Runtime != nil {
 		inspected, runtimeErr := i.Runtime.Inspect(ctx)
 		if runtimeErr != nil {
 			runtimeStatus = model.RuntimeStatus{
-				Supported: true, State: model.RuntimeStateInvalid, UpdateState: model.RuntimeUpdateUnknown,
+				Supported: true, State: model.RuntimeStateInvalid,
 				Detail: "LinUwUx runtime inspection failed",
 			}
 			i.Logger.Warn("LinUwUx runtime inspection failed", "error", runtimeErr)
@@ -279,7 +279,7 @@ func (i *Inspector) inspectProton() model.ProtonStatus {
 
 func deriveStatus(cpu model.CPUStatus, kernel model.KernelStatus, path model.PathMode, modules model.ModuleStatus, proton model.ProtonStatus, _ map[string]bool) model.SystemStatus {
 	return deriveStatusWithRuntime(cpu, kernel, path, modules, proton, model.RuntimeStatus{
-		State: model.RuntimeStateAbsent, UpdateState: model.RuntimeUpdateUnknown,
+		State: model.RuntimeStateAbsent,
 	}, nil)
 }
 
@@ -303,7 +303,7 @@ func deriveStatusWithRuntime(cpu model.CPUStatus, kernel model.KernelStatus, pat
 	checks = append(checks, model.Check{
 		ID: "linuwux", OK: integrationAvailable, Label: "LinUwUx integration",
 		Detail: linuwuxDetail(proton, runtimeStatus),
-		Remedy: failedRemedy(integrationAvailable, "Open Readiness details and setup to install LinUwUx Proton or the LinUwUx runtime."),
+		Remedy: failedRemedy(integrationAvailable, "Open Readiness details and setup to set up patched Proton or follow external runtime installation instructions."),
 	})
 	linuwuxStatus := model.LinUwUxStatus{
 		Available: integrationAvailable, Proton: proton, Runtime: runtimeStatus,
@@ -558,9 +558,6 @@ func linuwuxDetail(proton model.ProtonStatus, runtimeStatus model.RuntimeStatus)
 	}
 	if runtimeStatus.Available {
 		detail := "Runtime installed"
-		if runtimeStatus.VersionKnown {
-			detail += " (v" + runtimeStatus.Version + ")"
-		}
 		methods = append(methods, detail)
 	}
 	if len(methods) > 0 {

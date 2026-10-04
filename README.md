@@ -5,7 +5,7 @@ HV Launcher is a Decky Loader plugin that checks whether your system is ready to
 ## Features
 
 - Checks whether your system is ready.
-- Guides LinUwUx Proton, LinUwUx runtime, UMIP, and CPUID module setup.
+- Guides LinUwUx Proton, UMIP, and CPUID module setup, and detects an externally installed LinUwUx runtime.
 - Manages only the non-Steam game shortcuts you choose.
 - Starts and stops the hypervisor around managed games when required.
 
@@ -46,10 +46,10 @@ HV Launcher is a Decky Loader plugin that checks whether your system is ready to
 
 Before starting, choose either LinUwUx integration method:
 
-- A compatible LinUwUx Proton archive that you provide, or the user-scoped LinUwUx runtime installed by HV Launcher.
+- A compatible LinUwUx Proton archive that you provide, or the user-scoped LinUwUx runtime installed using upstream instructions.
 - The `cpuid_fault_emulation.zip` archive if your system requires the CPUID module.
 
-HV Launcher does not download Proton or CPUID-module archives for you. Only use archives obtained from a source you trust. Runtime installation is different: after explicit confirmation, HV Launcher downloads the latest stable release directly from the creator's fixed GitHub repository and verifies its published checksums.
+HV Launcher does not download runtime assets, Proton archives, or CPUID-module archives. Use the upstream runtime installation instructions and obtain archives from sources you trust.
 
 1. Download the latest `hv-launcher-v*.zip` from the [Releases page](https://github.com/RemakeCode/hv-launcher/releases). Do not extract it.
 2. Open Decky Loader and go to **Settings → Developer**.
@@ -62,11 +62,13 @@ Some setup changes require restarting Steam or rebooting the system before readi
 
 ## LinUwUx runtime
 
-Runtime mode installs `linuwux` to `~/.local/bin` and `liblinuwux.so` to `~/.local/lib` without root. It does not install or select a Steam compatibility tool. Select a compatible GE-Proton or CachyOS Proton build for each game in Steam; official Valve Proton is not currently supported upstream.
+Install and update the runtime using the [upstream instructions](https://github.com/brcly/linuwux-runtime#install), then refresh Readiness. HV Launcher detects the Decky user's `~/.local/bin/linuwux` and `~/.local/share/linuwux/LinUwUx.so`. Games continue to use their existing Wine/Proton runner; Flatpak launchers must be able to access both files.
 
-Install, update, and repair are user-triggered. HV Launcher resolves one exact latest stable release, downloads `liblinuwux.so`, `linuwux.sh`, and `SHA256SUMS` from that tag, and verifies the payload checksums before replacing an existing installation. It does not apply runtime updates automatically.
+Choose **Patched Proton** or **LinUwUx runtime** beside the shortcut's enable toggle. To change an enabled shortcut's method, disable it, select the new method, then enable it again. Existing records without a method retain patched Proton behavior and their saved launch options.
 
-[LinUwUx by brcly](https://github.com/brcly/linuwux-runtime) is licensed separately under AGPL-3.0-or-later. HV Launcher downloads the creator's release at setup time and does not bundle or redistribute the runtime assets in the plugin package.
+Runtime launches use absolute paths in the order HV Launcher → LinUwUx → the original command, including Gamescope when present. Original options are restored on disable only if Steam still contains HV Launcher's managed value; external edits are preserved.
+
+[LinUwUx by brcly](https://github.com/brcly/linuwux-runtime) is a separately licensed upstream project. The plugin does not contain or acquire its runtime assets.
 
 ## System support
 

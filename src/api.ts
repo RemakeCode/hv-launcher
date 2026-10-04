@@ -10,88 +10,60 @@ import type {
   UMIPInspection,
   ModulePreflight,
   ModuleTestResponse,
-  LinUwUxMode,
-  RuntimeSetupStatus,
+  LinUwUxMode
 } from '@/types';
 
-export const BASE_URL = "http://127.0.0.1:42991/v1";
+export const BASE_URL = 'http://127.0.0.1:42991/v1';
 export { FetcherError as BackendRequestError };
 
 const fetcher = new Fetcher(BASE_URL);
 
-export const getStatus = () => fetcher.get<SystemStatus>("/status");
-export const getConfiguration = () => fetcher.get<Configuration>("/config");
-export const enableGame = (
-  appId: string,
-  name: string,
-  shortcut: boolean,
-  currentLaunch: string,
-  mode?: LinUwUxMode,
-) => fetcher.post<ManageResponse>(`/games/${appId}/enable`, {
-  name,
-  shortcut,
-  currentLaunch,
-  ...(mode ? { mode } : {}),
-});
-export const reconfigureGame = (
-  appId: string,
-  currentLaunch: string,
-  mode: LinUwUxMode,
-) => fetcher.post<ManageResponse>(`/games/${appId}/mode`, { currentLaunch, mode });
-export const disableGame = (appId: string) =>
-  fetcher.post<void>(`/games/${appId}/disable`, {});
+export const getStatus = () => fetcher.get<SystemStatus>('/status');
+export const getConfiguration = () => fetcher.get<Configuration>('/config');
+export const enableGame = (appId: string, name: string, shortcut: boolean, currentLaunch: string, mode?: LinUwUxMode) =>
+  fetcher.post<ManageResponse>(`/games/${appId}/enable`, {
+    name,
+    shortcut,
+    currentLaunch,
+    ...(mode ? { mode } : {})
+  });
+export const disableGame = (appId: string) => fetcher.post<void>(`/games/${appId}/disable`, {});
 export const postLifetime = (appId: string, instanceId: number, running: boolean) =>
-  fetcher.post<{ status?: string } | undefined>("/lifetime", {
+  fetcher.post<{ status?: string } | undefined>('/lifetime', {
     appId,
     instanceId,
-    running,
+    running
   });
 
 export const preflightProtonArchive = (path: string) =>
-  fetcher.post<ProtonPreflightResponse>("/setup/proton/preflight", { path });
+  fetcher.post<ProtonPreflightResponse>('/setup/proton/preflight', { path });
 
-export const installProtonArchive = (
-  path: string,
-  destinationId: string,
-) => fetcher.post<SetupJobSnapshot>("/setup/proton/install", {
-  path,
-  destinationId,
-  confirmedSource: true,
-});
+export const installProtonArchive = (path: string, destinationId: string) =>
+  fetcher.post<SetupJobSnapshot>('/setup/proton/install', {
+    path,
+    destinationId,
+    confirmedSource: true
+  });
 
-export const getRuntimeSetupStatus = () =>
-  fetcher.get<RuntimeSetupStatus>("/setup/runtime");
+export const getUMIPInspection = () => fetcher.get<UMIPInspection>('/setup/umip');
 
-export const installRuntime = (action: "install" | "update" | "repair") =>
-  fetcher.post<SetupJobSnapshot>("/setup/runtime", { action });
-
-export const removeRuntime = () => fetcher.delete<void>("/setup/runtime");
-
-export const getUMIPInspection = () =>
-  fetcher.get<UMIPInspection>("/setup/umip");
-
-export const getModulePreflight = () =>
-  fetcher.get<ModulePreflight>("/setup/module/preflight");
+export const getModulePreflight = () => fetcher.get<ModulePreflight>('/setup/module/preflight');
 
 export const installModuleArchive = (path: string, capability: string) =>
-  fetcher.post<SetupJobSnapshot>("/setup/module/install", {
+  fetcher.post<SetupJobSnapshot>('/setup/module/install', {
     path,
-    capability,
+    capability
   });
 
 export const testModule = (capability: string) =>
-  fetcher.post<ModuleTestResponse>("/setup/module/test", { capability });
+  fetcher.post<ModuleTestResponse>('/setup/module/test', { capability });
 
-export const applyUMIPConfiguration = (
-  bootloader: UMIPBootloader,
-  capability: string,
-) => fetcher.post<SetupJobSnapshot>("/setup/umip", {
-  bootloader,
-  capability,
-});
+export const applyUMIPConfiguration = (bootloader: UMIPBootloader, capability: string) =>
+  fetcher.post<SetupJobSnapshot>('/setup/umip', {
+    bootloader,
+    capability
+  });
 
-export const getActiveSetupJob = () =>
-  fetcher.get<ActiveSetupJob>("/setup/jobs/active");
+export const getActiveSetupJob = () => fetcher.get<ActiveSetupJob>('/setup/jobs/active');
 
-export const getSetupJob = (jobId: string) =>
-  fetcher.get<SetupJobSnapshot>(`/setup/jobs/${encodeURIComponent(jobId)}`);
+export const getSetupJob = (jobId: string) => fetcher.get<SetupJobSnapshot>(`/setup/jobs/${encodeURIComponent(jobId)}`);

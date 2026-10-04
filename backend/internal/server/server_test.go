@@ -91,7 +91,7 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	inspector := &system.Inspector{Reader: system.OSReader{}, Runner: host, Paths: system.Paths{
 		CPUInfo: cpu, KernelRelease: kernel, ModulesRoot: modules, SteamRoots: []string{steamRoot},
 	}}
-	runtimeManager, err := linuwuxruntime.NewLocalManager(root)
+	runtimeManager, err := linuwuxruntime.NewInspector(root)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func newTestService(t *testing.T) (*Service, string, *config.Store, *hypervisor.
 	service, err := New(Options{
 		Config: store, Inspector: inspector, Manager: manager, Controller: controller,
 		ProcessReader: system.OSReader{}, ProcRoot: filepath.Join(root, "proc"),
-		Proton: proton.NewInstaller(root), Runtime: runtimeManager, Jobs: jobs.NewCoordinator(),
+		Proton: proton.NewInstaller(root), Jobs: jobs.NewCoordinator(),
 		UMIP:            umipInspector,
 		Capabilities:    capabilities,
 		ModulePreflight: cpuidmodule.NewPreflightInspector(cpuidmodule.DefaultPreflightPaths()),
