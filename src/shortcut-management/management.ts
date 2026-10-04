@@ -6,49 +6,47 @@ export interface ShortcutSections {
 }
 
 export function shouldShowShortcutManagement(
-  status: Pick<SystemStatus, "path"> & { linuwux?: Pick<SystemStatus["linuwux"], "runtime"> },
-  configuration: Configuration,
+  status: Pick<SystemStatus, 'path'> & { linuwux?: Pick<NonNullable<SystemStatus['linuwux']>, 'runtime'> },
+  configuration: Configuration
 ): boolean {
-  return status.path === "hypervisor" ||
-    status.linuwux?.runtime.available === true ||
-    Object.values(configuration.games).some((game) => game.shortcut);
+  return (
+    status.path === 'hypervisor' ||
+    status.linuwux?.runtime?.available === true ||
+    Object.values(configuration.games).some((game) => game.shortcut)
+  );
 }
 
 export function effectiveGameMode(configuration: Configuration, appId: string): LinUwUxMode {
-  return configuration.games[appId]?.mode ?? "proton";
+  return configuration.games[appId]?.mode ?? 'proton';
 }
 
 export function availableModes(status: SystemStatus): LinUwUxMode[] {
   const modes: LinUwUxMode[] = [];
-  if (status.linuwux.proton.found) modes.push("proton");
-  if (status.linuwux.runtime.available) modes.push("runtime");
+  if (isModeAvailable(status, 'proton')) modes.push('proton');
+  if (isModeAvailable(status, 'runtime')) modes.push('runtime');
   return modes;
 }
 
 export function isModeAvailable(status: SystemStatus, mode: LinUwUxMode): boolean {
-  return mode === "proton" ? status.linuwux.proton.found : status.linuwux.runtime.available;
+  return mode === 'proton'
+    ? (status.linuwux?.proton ?? status.proton).found
+    : status.linuwux?.runtime?.available === true;
 }
 
 export function groupShortcuts(games: Game[]): ShortcutSections {
-  const shortcuts = games
-    .filter((game) => game.shortcut)
-    .sort((left, right) => left.name.localeCompare(right.name));
+  const shortcuts = games.filter((game) => game.shortcut).sort((left, right) => left.name.localeCompare(right.name));
   return {
     managed: shortcuts.filter((game) => game.enabled),
-    available: shortcuts.filter((game) => !game.enabled),
+    available: shortcuts.filter((game) => !game.enabled)
   };
 }
 
-export function shortcutDescription(
-  game: Game,
-  state: DisplayState,
-  updating: boolean,
-): string | undefined {
+export function shortcutDescription(game: Game, state: DisplayState, updating: boolean): string | undefined {
   const details: string[] = [];
-  if (state !== "idle") details.push(state[0].toUpperCase() + state.slice(1));
-  if (updating) details.push("Updating…");
-  if (game.missing) details.push("Missing from Steam");
-  return details.length > 0 ? details.join(" · ") : undefined;
+  if (state !== 'idle') details.push(state[0].toUpperCase() + state.slice(1));
+  if (updating) details.push('Updating…');
+  if (game.missing) details.push('Missing from Steam');
+  return details.length > 0 ? details.join(' · ') : undefined;
 }
 
 function errorMessage(reason: unknown): string {
@@ -59,14 +57,6 @@ export function readinessError(reason: unknown): string {
   return errorMessage(reason);
 }
 
-export function shortcutActionError(
-  game: Game,
-  enabled: boolean,
-  reason: unknown,
-): string {
-  return `Failed to ${enabled ? "enable" : "disable"} “${game.name}”: ${errorMessage(reason)}`;
-}
-
-export function shortcutModeError(game: Game, reason: unknown): string {
-  return `Failed to change the LinUwUx method for “${game.name}”: ${errorMessage(reason)}`;
+export function shortcutActionError(game: Game, enabled: boolean, reason: unknown): string {
+  return `Failed to ${enabled ? 'enable' : 'disable'} “${game.name}”: ${errorMessage(reason)}`;
 }

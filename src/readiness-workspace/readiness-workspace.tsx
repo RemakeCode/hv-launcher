@@ -1,15 +1,8 @@
-import { Field, PanelSection, SidebarNavigation } from '@decky/ui';
+import { DialogButton, DialogLabel, Navigation, Field, PanelSection, SidebarNavigation } from '@decky/ui';
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece, FaShieldAlt, FaWineBottle } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
-import {
-  getModulePreflight,
-  getRuntimeSetupStatus,
-  getStatus,
-  getUMIPInspection,
-  installRuntime,
-  removeRuntime,
-} from '@/api';
+import { getModulePreflight, getStatus, getUMIPInspection } from '@/api';
 import { READINESS_ROUTE } from '@/qam/qam';
 import { ReadinessItem, readinessColor } from '@/readiness/readiness-item';
 import {
@@ -22,8 +15,8 @@ import { LoadingSpinner } from '@/shared/loading-spinner';
 import { logger } from '@/shared/logger';
 import { readinessError } from '@/shortcut-management/management';
 import { setupEventStore } from '@/setup-events';
-import type { Check, ModulePreflight, RuntimeSetupStatus, SetupJobSnapshot, SystemStatus } from '@/types';
-import { LinUwUxSetup } from '@/readiness-workspace/linuwux/linuwux-setup';
+import type { Check, ModulePreflight, SystemStatus } from '@/types';
+import { ProtonSetup } from '@/readiness-workspace/linuwux/proton-setup';
 import { emptyProtonDraft, protonDraftReducer } from '@/readiness-workspace/linuwux/proton-state';
 import { ModuleSetup } from '@/readiness-workspace/module-setup';
 import { UMIPSetup } from '@/readiness-workspace/umip-setup';
@@ -43,14 +36,14 @@ interface ReadinessDetailProps {
 }
 
 const workspaceIcons: Record<string, IconType> = {
-  umip: FaShieldAlt,
+  'umip': FaShieldAlt,
   'emulation-module': FaPuzzlePiece,
-  linuwux: FaWineBottle
+  'linuwux': FaWineBottle
 };
 
 const workspaceTitles: Record<string, string> = {
   'emulation-module': 'CPUID module',
-  linuwux: 'LinUwUx integration'
+  'linuwux': 'LinUwUx integration'
 };
 
 const PROTON_COMPLETION_HOLD_MS = 2_000;
@@ -97,19 +90,12 @@ export function ReadinessWorkspace() {
     protonDraftReducer,
     getReadinessWorkspaceProtonFixture() ?? emptyProtonDraft
   );
-  const [umipDraft, dispatchUMIP] = useReducer(
-    umipDraftReducer,
-    getReadinessWorkspaceUMIPFixture() ?? emptyUMIPDraft
-  );
+  const [umipDraft, dispatchUMIP] = useReducer(umipDraftReducer, getReadinessWorkspaceUMIPFixture() ?? emptyUMIPDraft);
   const [moduleDraft, dispatchModule] = useReducer(
     moduleDraftReducer,
     getReadinessWorkspaceModuleFixture()?.draft ?? emptyModuleDraft
   );
   const [modulePreflight, setModulePreflight] = useState<ModulePreflight>();
-  const [runtimeSetup, setRuntimeSetup] = useState<RuntimeSetupStatus>();
-  const [runtimeJob, setRuntimeJob] = useState<SetupJobSnapshot>();
-  const [runtimeError, setRuntimeError] = useState('');
-  const [runtimeRemoving, setRuntimeRemoving] = useState(false);
   const [mutationActive, setMutationActive] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -120,22 +106,6 @@ export function ReadinessWorkspace() {
       setStatus(next);
       setSelected((current) => current || initialReadinessSelection(checks));
       setError('');
-      if (checks.some((check) => check.id === 'linuwux')) {
-        if (fixture) {
-          setRuntimeSetup({
-            runtime: next.linuwux.runtime,
-            repository: 'brcly/linuwux-runtime'
-          });
-        } else {
-          try {
-            setRuntimeSetup(await getRuntimeSetupStatus());
-            setRuntimeError('');
-          } catch (reason) {
-            logger.error('Failed to inspect LinUwUx runtime setup', reason);
-            setRuntimeError(readinessError(reason));
-          }
-        }
-      }
       if (checks.some((check) => check.id === 'umip')) {
         const visualUMIP = getReadinessWorkspaceUMIPFixture();
         if (fixture && visualUMIP?.inspection) {
@@ -180,28 +150,24 @@ export function ReadinessWorkspace() {
         dispatchProton({ type: 'job-updated', job });
         dispatchUMIP({ type: 'job-updated', job });
         dispatchModule({ type: 'job-updated', job });
-        if (job.kind === 'runtime-install') setRuntimeJob(job);
-        if ((job.kind === 'proton-install' || job.kind === 'runtime-install' || job.kind === 'umip-apply' || job.kind === 'module-install') && job.state !== 'running') {
+        if (
+          (job.kind === 'proton-install' || job.kind === 'umip-apply' || job.kind === 'module-install') &&
+          job.state !== 'running'
+        ) {
           void refresh();
         }
       }),
     [refresh]
   );
 
-  useEffect(
-    () => setupEventStore.subscribeActivationFailure(() => void refresh()),
-    [refresh]
-  );
+  useEffect(() => setupEventStore.subscribeActivationFailure(() => void refresh()), [refresh]);
 
   useEffect(() => {
     if (protonDraft.stage !== 'completing') return;
-    const timer = setTimeout(
-      () => {
-        setupEventStore.dismiss('proton-install');
-        dispatchProton({ type: 'completion-displayed' });
-      },
-      PROTON_COMPLETION_HOLD_MS
-    );
+    const timer = setTimeout(() => {
+      setupEventStore.dismiss('proton-install');
+      dispatchProton({ type: 'completion-displayed' });
+    }, PROTON_COMPLETION_HOLD_MS);
     return () => clearTimeout(timer);
   }, [protonDraft.stage]);
 
@@ -214,67 +180,50 @@ export function ReadinessWorkspace() {
     );
   }
 
-  const startRuntimeSetup = async (action: 'install' | 'update' | 'repair') => {
-    setRuntimeError('');
-    try {
-      const job = await installRuntime(action);
-      setRuntimeJob(job);
-      setMutationActive(true);
-    } catch (reason) {
-      logger.error(`Failed to start LinUwUx runtime ${action}`, reason);
-      setRuntimeError(readinessError(reason));
-    }
-  };
-
-  const removeRuntimeSetup = async () => {
-    setRuntimeError('');
-    setRuntimeRemoving(true);
-    try {
-      await removeRuntime();
-      await refresh();
-    } catch (reason) {
-      logger.error('Failed to remove LinUwUx runtime', reason);
-      setRuntimeError(readinessError(reason));
-    } finally {
-      setRuntimeRemoving(false);
-    }
-  };
-
   const checks = readinessWorkspaceChecks(status.checks);
   const pages = checks.map((check) => {
     const Icon = workspaceIcons[check.id] ?? FaExclamationTriangle;
-    const content = check.id === 'linuwux' ? (
-      <LinUwUxSetup
-        status={status}
-        protonDraft={protonDraft}
-        runtimeSetup={runtimeSetup}
-        runtimeJob={runtimeJob}
-        runtimeError={runtimeError}
-        mutationActive={mutationActive || runtimeRemoving}
-        onProtonDraft={dispatchProton}
-        onRuntimeAction={(action) => void startRuntimeSetup(action)}
-        onRuntimeRemove={() => void removeRuntimeSetup()}
-      />
-    ) : check.id === 'umip' ? (
-      <UMIPSetup
-        check={check}
-        draft={umipDraft}
-        mutationActive={mutationActive}
-        onDraft={dispatchUMIP}
-      />
-    ) : check.id === 'emulation-module' ? (
-      <ModuleSetup
-        check={check}
-        draft={moduleDraft}
-        preflight={modulePreflight}
-        mutationActive={mutationActive}
-        status={status}
-        onRefresh={refresh}
-        onDraft={dispatchModule}
-      />
-    ) : (
-      <ReadinessDetail check={check} />
-    );
+    const content =
+      check.id === 'linuwux' ? (
+        <>
+          <ProtonSetup
+            draft={protonDraft}
+            installedTools={(status.linuwux?.proton ?? status.proton).tools}
+            mutationActive={mutationActive}
+            onDraft={dispatchProton}
+          />
+          <PanelSection title='LinUwUx runtime'>
+            <DialogLabel>
+              {status.linuwux?.runtime?.detail ??
+                (!status.linuwux ? 'Reload the plugin with the updated backend to detect the runtime.' : undefined)}
+            </DialogLabel>
+            <DialogLabel>
+              Install and update the runtime using the upstream instructions, then refresh here. Flatpak launchers must
+              be able to read the wrapper and library.
+            </DialogLabel>
+            <DialogButton
+              onClick={() => Navigation.NavigateToExternalWeb('https://github.com/brcly/linuwux-runtime#install')}
+            >
+              LinUwUx by brcly — installation instructions
+            </DialogButton>
+            <DialogButton onClick={() => void refresh()}>Refresh status</DialogButton>
+          </PanelSection>
+        </>
+      ) : check.id === 'umip' ? (
+        <UMIPSetup check={check} draft={umipDraft} mutationActive={mutationActive} onDraft={dispatchUMIP} />
+      ) : check.id === 'emulation-module' ? (
+        <ModuleSetup
+          check={check}
+          draft={moduleDraft}
+          preflight={modulePreflight}
+          mutationActive={mutationActive}
+          status={status}
+          onRefresh={refresh}
+          onDraft={dispatchModule}
+        />
+      ) : (
+        <ReadinessDetail check={check} />
+      );
 
     return {
       route: READINESS_ROUTE,

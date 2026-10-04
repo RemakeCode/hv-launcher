@@ -1,6 +1,6 @@
-import { definePlugin, routerHook, toaster } from "@decky/api";
-import { staticClasses } from "@decky/ui";
-import { VscVmRunning } from "react-icons/vsc";
+import { definePlugin, routerHook, toaster } from '@decky/api';
+import { staticClasses } from '@decky/ui';
+import { VscVmRunning } from 'react-icons/vsc';
 import { ReadinessContent, MANAGEMENT_ROUTE, READINESS_ROUTE } from '@/qam/qam';
 import { ReadinessWorkspace } from '@/readiness-workspace/readiness-workspace';
 import { ShortcutManagementPage } from '@/shortcut-management/shortcut-management-page';
@@ -10,25 +10,21 @@ import { observeSteamLifetime } from '@/steam';
 import type { SetupJobSnapshot } from '@/types';
 
 function setupToastBody(job: SetupJobSnapshot): string {
-  const succeeded = job.state === "succeeded";
+  const succeeded = job.state === 'succeeded';
 
   switch (job.kind) {
-    case "umip-apply":
+    case 'umip-apply':
       return succeeded
-        ? "The boot configuration was updated. Restart the system to finish disabling UMIP."
-        : "The UMIP configuration did not complete. Open Readiness setup for recovery details.";
-    case "module-install":
+        ? 'The boot configuration was updated. Restart the system to finish disabling UMIP.'
+        : 'The UMIP configuration did not complete. Open Readiness setup for recovery details.';
+    case 'module-install':
       return succeeded
-        ? "The CPUID module installation finished. Reopen Readiness setup to review module verification and signature metadata."
-        : "The CPUID module installation did not complete. Open Readiness setup for details.";
-    case "runtime-install":
-      return succeeded
-        ? "The LinUwUx runtime installation finished and is ready for managed shortcuts."
-        : "The LinUwUx runtime installation did not complete. Open Readiness setup for details.";
+        ? 'The CPUID module installation finished. Reopen Readiness setup to review module verification and signature metadata.'
+        : 'The CPUID module installation did not complete. Open Readiness setup for details.';
     default:
       return succeeded
-        ? "The Proton installation finished. Restart Steam before selecting the new tool."
-        : "The Proton installation did not complete. Open Readiness setup for details.";
+        ? 'The Proton installation finished. Restart Steam before selecting the new tool.'
+        : 'The Proton installation did not complete. Open Readiness setup for details.';
   }
 }
 
@@ -37,31 +33,31 @@ export default definePlugin(() => {
   routerHook.addRoute(READINESS_ROUTE, ReadinessWorkspace);
 
   setupEventStore.start((job) => {
-    const succeeded = job.state === "succeeded";
+    const succeeded = job.state === 'succeeded';
     toaster.toast({
-      title: succeeded ? "HV Launcher setup complete" : "HV Launcher setup failed",
+      title: succeeded ? 'HV Launcher setup complete' : 'HV Launcher setup failed',
       body: setupToastBody(job),
       critical: !succeeded,
       playSound: true,
-      showToast: true,
+      showToast: true
     });
   });
   setupEventStore.subscribeActivationFailure((failure) => {
     toaster.toast({
-      title: "CPUID module activation failed",
+      title: 'CPUID module activation failed',
       body: failure.detail ? `${failure.summary}: ${failure.detail}` : failure.summary,
       critical: true,
       playSound: true,
-      showToast: true,
+      showToast: true
     });
   });
 
   const stopLifetimeObserver = observeSteamLifetime({
-    onError: (reason) => logger.error("Failed to forward a Steam lifetime notification", reason),
+    onError: (reason) => logger.error('Failed to forward a Steam lifetime notification', reason)
   });
 
   return {
-    name: "HV Launcher",
+    name: 'HV Launcher',
     titleView: <div className={staticClasses.Title}>HV Launcher</div>,
     content: <ReadinessContent />,
     icon: <VscVmRunning />,
@@ -70,6 +66,6 @@ export default definePlugin(() => {
       setupEventStore.stop();
       routerHook.removeRoute(MANAGEMENT_ROUTE);
       routerHook.removeRoute(READINESS_ROUTE);
-    },
+    }
   };
 });

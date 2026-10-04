@@ -272,10 +272,9 @@ func TestLinUwUxMethodReadiness(t *testing.T) {
 	proton := model.ProtonStatus{Found: true, Tools: []string{"GE-Proton-LinUwUx"}}
 	runtimeAvailable := model.RuntimeStatus{
 		Supported: true, Available: true, State: model.RuntimeStateAvailable,
-		Version: "26.08.14.1", VersionKnown: true, UpdateState: model.RuntimeUpdateUnknown,
 	}
-	runtimeAbsent := model.RuntimeStatus{Supported: true, State: model.RuntimeStateAbsent, UpdateState: model.RuntimeUpdateUnknown}
-	runtimeInvalid := model.RuntimeStatus{Supported: true, State: model.RuntimeStateInvalid, Detail: "library missing", UpdateState: model.RuntimeUpdateUnknown}
+	runtimeAbsent := model.RuntimeStatus{Supported: true, State: model.RuntimeStateAbsent}
+	runtimeInvalid := model.RuntimeStatus{Supported: true, State: model.RuntimeStateInvalid, Detail: "library missing"}
 
 	tests := []struct {
 		name          string

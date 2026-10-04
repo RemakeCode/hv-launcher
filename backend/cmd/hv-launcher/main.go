@@ -53,12 +53,8 @@ func run(args []string) error {
 		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 		defer stop()
 		return proton.RunWorker(ctx, os.Stdin, os.Stdout)
-	case linuwuxruntime.WorkerCommand:
-		ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-		defer stop()
-		return linuwuxruntime.RunWorker(ctx, os.Stdin, os.Stdout)
 	default:
-		return fmt.Errorf("unknown command %q (expected run, %s, %s, or no command)", args[0], proton.WorkerCommand, linuwuxruntime.WorkerCommand)
+		return fmt.Errorf("unknown command %q (expected run, %s, or no command)", args[0], proton.WorkerCommand)
 	}
 }
 
@@ -116,9 +112,9 @@ func serveBackend() error {
 	if err != nil {
 		return fmt.Errorf("configure unprivileged LinUwUx Proton worker: %w", err)
 	}
-	runtimeWorker, err := linuwuxruntime.NewWorkerClient(executable, userHome, int(userStat.Uid), int(userStat.Gid))
+	runtimeInspector, err := linuwuxruntime.NewInspector(userHome)
 	if err != nil {
-		return fmt.Errorf("configure unprivileged LinUwUx runtime worker: %w", err)
+		return fmt.Errorf("configure LinUwUx runtime inspection: %w", err)
 	}
 
 	kernelData, err := os.ReadFile("/proc/sys/kernel/osrelease")
@@ -146,7 +142,7 @@ func serveBackend() error {
 
 	inspector := system.NewInspector(userHome)
 	inspector.VerificationStore = verificationStore
-	inspector.Runtime = runtimeWorker
+	inspector.Runtime = runtimeInspector
 	installer := cpuidmodule.NewInstaller(cpuidmodule.DefaultPreflightPaths(), cpuidmodule.ExecPackageCommandRunner{})
 	installer.Verifier = controller.TestModule
 
@@ -160,7 +156,6 @@ func serveBackend() error {
 		Controller:      controller,
 		Logger:          logger,
 		Proton:          protonWorker,
-		Runtime:         runtimeWorker,
 		Jobs:            setupJobs,
 		UMIP:            umip.NewInspector(umip.DefaultPaths()),
 		Capabilities:    capabilities,

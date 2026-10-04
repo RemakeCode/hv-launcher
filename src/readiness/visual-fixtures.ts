@@ -15,14 +15,10 @@ import type {
   UMIPInspection
 } from '@/types';
 
-type ProtonWorkspaceFixtureName = 'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
+type ProtonWorkspaceFixtureName =
+  'proton-missing' | 'proton-confirm' | 'proton-installing' | 'proton-success' | 'proton-failure';
 type UMIPWorkspaceFixtureName =
-  | 'umip-automatic'
-  | 'umip-choice'
-  | 'umip-manual'
-  | 'umip-existing'
-  | 'umip-success'
-  | 'umip-failure';
+  'umip-automatic' | 'umip-choice' | 'umip-manual' | 'umip-existing' | 'umip-success' | 'umip-failure';
 type ModuleWorkspaceFixtureName =
   | 'module-missing'
   | 'module-ready'
@@ -34,7 +30,8 @@ type ModuleWorkspaceFixtureName =
   | 'module-signing'
   | 'module-conflict';
 type WorkspaceFixtureName = ProtonWorkspaceFixtureName | UMIPWorkspaceFixtureName | ModuleWorkspaceFixtureName;
-export type VisualFixtureName = AggregateStatus | 'native-intel7' | 'z1-extreme' | 'z1-extreme-native' | WorkspaceFixtureName | '';
+export type VisualFixtureName =
+  AggregateStatus | 'native-intel7' | 'z1-extreme' | 'z1-extreme-native' | WorkspaceFixtureName | '';
 type QAMFixtureName = Exclude<VisualFixtureName, '' | WorkspaceFixtureName>;
 
 export interface QAMVisualFixture {
@@ -43,9 +40,7 @@ export interface QAMVisualFixture {
 }
 
 const embeddedFixture: string = '__HV_QAM_VISUAL_FIXTURE__';
-const selectedFixture = embeddedFixture.startsWith('__HV_')
-  ? ''
-  : embeddedFixture as VisualFixtureName;
+const selectedFixture = embeddedFixture.startsWith('__HV_') ? '' : (embeddedFixture as VisualFixtureName);
 
 const emptyConfiguration: Configuration = { version: 1, games: {} };
 
@@ -104,9 +99,7 @@ function status(overrides: Partial<SystemStatus>): SystemStatus {
         available: false,
         state: 'absent',
         path: '/home/deck/.local/bin/linuwux',
-        libraryPath: '/home/deck/.local/lib/liblinuwux.so',
-        versionKnown: false,
-        updateState: 'unknown'
+        libraryPath: '/home/deck/.local/share/linuwux/LinUwUx.so'
       }
     },
     checks: [],
@@ -278,9 +271,27 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
       checks: [
         check('cpu', 'CPU', 'AMD Zen 3'),
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
-        check('umip', 'UMIP', 'enabled and blocking', false, 'Add clearcpuid=514 (or clearcpuid=umip) to the kernel command line and reboot.'),
-        check('emulation-module', 'CPUID module', 'installed module does not match the running kernel', false, 'Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it.'),
-        check('linuwux', 'LinUwUx integration', 'no supported method detected', false, 'Open Readiness details and setup to install LinUwUx Proton or the LinUwUx runtime.')
+        check(
+          'umip',
+          'UMIP',
+          'enabled and blocking',
+          false,
+          'Add clearcpuid=514 (or clearcpuid=umip) to the kernel command line and reboot.'
+        ),
+        check(
+          'emulation-module',
+          'CPUID module',
+          'installed module does not match the running kernel',
+          false,
+          'Install cpuid_fault_emulation through DKMS for the running kernel; the plugin does not install it.'
+        ),
+        check(
+          'linuwux',
+          'LinUwUx integration',
+          'no supported method detected',
+          false,
+          'Open Readiness details and setup to set up patched Proton or follow external runtime installation instructions.'
+        )
       ]
     })
   },
@@ -306,7 +317,7 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
       ]
     })
   },
-  unsupported: {
+  'unsupported': {
     configuration: emptyConfiguration,
     status: status({
       status: 'unsupported',
@@ -325,7 +336,13 @@ const fixtures: Record<QAMFixtureName, QAMVisualFixture> = {
         cpuidFaultFlag: false
       },
       checks: [
-        check('cpu', 'CPU', 'Intel 3rd generation', false, 'Requires Intel 4th generation or AMD Ryzen 1st generation or newer.'),
+        check(
+          'cpu',
+          'CPU',
+          'Intel 3rd generation',
+          false,
+          'Requires Intel 4th generation or AMD Ryzen 1st generation or newer.'
+        ),
         check('kernel', 'Linux kernel', '6.14.0-visual-fixture'),
         check('umip', 'UMIP', 'not required'),
         check('linuwux', 'LinUwUx integration', 'Proton: GE-Proton11-1-LinUwUx')
@@ -350,7 +367,8 @@ export function getQAMVisualFixture(name: VisualFixtureName = selectedFixture): 
       }
     };
   }
-  if (name.startsWith('proton-') || name.startsWith('umip-') || name.startsWith('module-')) return fixtures['setup-required'];
+  if (name.startsWith('proton-') || name.startsWith('umip-') || name.startsWith('module-'))
+    return fixtures['setup-required'];
   return fixtures[name as QAMFixtureName];
 }
 
@@ -395,7 +413,7 @@ const moduleInspection = {
   entryCount: 3,
   expandedBytes: 18432,
   requiredFiles: ['dkms.conf', 'Makefile'],
-  warning: 'HV Launcher cannot verify this archive\'s origin. DKMS will execute its Makefile as root.'
+  warning: "HV Launcher cannot verify this archive's origin. DKMS will execute its Makefile as root."
 };
 
 function moduleResult(signingRequired = false): ModuleInstallResult {
@@ -453,16 +471,36 @@ export function getReadinessWorkspaceModuleFixture(
       draft = { ...reviewed, stage: 'installing', job: moduleJob('running') };
       break;
     case 'module-success':
-      draft = { ...reviewed, stage: 'complete', job: moduleJob('succeeded', undefined, moduleResult()), result: moduleResult() };
+      draft = {
+        ...reviewed,
+        stage: 'complete',
+        job: moduleJob('succeeded', undefined, moduleResult()),
+        result: moduleResult()
+      };
       break;
     case 'module-signing':
-      draft = { ...reviewed, stage: 'complete', job: moduleJob('succeeded', undefined, moduleResult(true)), result: moduleResult(true) };
+      draft = {
+        ...reviewed,
+        stage: 'complete',
+        job: moduleJob('succeeded', undefined, moduleResult(true)),
+        result: moduleResult(true)
+      };
       break;
     case 'module-failure':
-      draft = { ...reviewed, stage: 'failure', job: moduleJob('failed', 'The selected archive is invalid.'), error: 'The selected archive is invalid.' };
+      draft = {
+        ...reviewed,
+        stage: 'failure',
+        job: moduleJob('failed', 'The selected archive is invalid.'),
+        error: 'The selected archive is invalid.'
+      };
       break;
     case 'module-conflict':
-      draft = { ...reviewed, stage: 'failure', job: moduleJob('failed', 'This module version is already registered with DKMS.'), error: 'This module version is already registered with DKMS.' };
+      draft = {
+        ...reviewed,
+        stage: 'failure',
+        job: moduleJob('failed', 'This module version is already registered with DKMS.'),
+        error: 'This module version is already registered with DKMS.'
+      };
       break;
     case 'module-manual':
       draft = { stage: 'idle' };
@@ -480,7 +518,8 @@ export function getReadinessWorkspaceModuleFixture(
 }
 
 const protonSelection: ProtonPreflightResponse = {
-  responsibility: "HV Launcher cannot verify this archive's publisher, authenticity, or suitability. Confirm that you sourced and selected the intended archive before installing.",
+  responsibility:
+    "HV Launcher cannot verify this archive's publisher, authenticity, or suitability. Confirm that you sourced and selected the intended archive before installing.",
   preflight: {
     fileName: 'cachyos-11.0-LinUwUx.tar.xz',
     compression: 'xz',
@@ -501,12 +540,15 @@ function protonJob(state: SetupJobSnapshot['state']): SetupJobSnapshot {
     progress: state === 'running' ? 58 : 100,
     output: state === 'running' ? ['Validating the selected Proton archive'] : [],
     error: state === 'failed' ? 'The destination became unavailable during installation.' : undefined,
-    result: state === 'succeeded' ? {
-      toolName: 'cachyos_11.0_20260702-LinUwUx',
-      destinationId: 'native',
-      sha256: 'f06a82e15cdd2b49fa8287bd9f8be4ea3d09a9f1cb5566339a3d61c38a5d902e',
-      restartSteam: true
-    } : undefined,
+    result:
+      state === 'succeeded'
+        ? {
+            toolName: 'cachyos_11.0_20260702-LinUwUx',
+            destinationId: 'native',
+            sha256: 'f06a82e15cdd2b49fa8287bd9f8be4ea3d09a9f1cb5566339a3d61c38a5d902e',
+            restartSteam: true
+          }
+        : undefined,
     startedAt: '2026-07-18T12:00:00Z',
     finishedAt: state === 'running' ? undefined : '2026-07-18T12:01:00Z'
   };
@@ -519,9 +561,7 @@ const completedProtonInstall: ProtonInstallResult = {
   restartSteam: true
 };
 
-export function getReadinessWorkspaceProtonFixture(
-  name: VisualFixtureName = selectedFixture
-): ProtonDraft | undefined {
+export function getReadinessWorkspaceProtonFixture(name: VisualFixtureName = selectedFixture): ProtonDraft | undefined {
   if (!name.startsWith('proton-')) return undefined;
   const reviewed: ProtonDraft = {
     stage: 'confirm',
@@ -581,16 +621,15 @@ function umipJob(state: SetupJobSnapshot['state']): SetupJobSnapshot {
     phase: state === 'running' ? 'regenerating-boot-configuration' : state === 'succeeded' ? 'complete' : 'failed',
     progress: state === 'running' ? 65 : 100,
     output: state === 'running' ? ['Updating bootloader configuration'] : [],
-    error: state === 'failed' ? 'The bootloader updater failed and the original configuration was restored.' : undefined,
+    error:
+      state === 'failed' ? 'The bootloader updater failed and the original configuration was restored.' : undefined,
     result: state === 'succeeded' ? { bootloader: 'limine', restartRequired: true } : undefined,
     startedAt: '2026-07-19T12:00:00Z',
     finishedAt: state === 'running' ? undefined : '2026-07-19T12:00:04Z'
   };
 }
 
-export function getReadinessWorkspaceUMIPFixture(
-  name: VisualFixtureName = selectedFixture
-): UMIPDraft | undefined {
+export function getReadinessWorkspaceUMIPFixture(name: VisualFixtureName = selectedFixture): UMIPDraft | undefined {
   if (!name) return undefined;
   if (!name.startsWith('umip-')) {
     const visualStatus = getQAMVisualFixture(name)?.status;
@@ -623,10 +662,12 @@ export function getReadinessWorkspaceUMIPFixture(
           liveUmip: true,
           selection: 'manual-only',
           candidates: [],
-          manual: [{
-            reason: 'unsupported-bootloader',
-            detail: 'No supported Limine or GRUB configuration was found; add clearcpuid=514 manually.'
-          }]
+          manual: [
+            {
+              reason: 'unsupported-bootloader',
+              detail: 'No supported Limine or GRUB configuration was found; add clearcpuid=514 manually.'
+            }
+          ]
         }
       };
     case 'umip-existing': {
