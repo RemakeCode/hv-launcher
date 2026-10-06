@@ -23,12 +23,15 @@ func ManagedLaunchValue(original, wrapperPath, appID string) (string, error) {
 	return ManagedLaunchValueForMode(original, wrapperPath, appID, "", linuwux.ModeProton)
 }
 
-func ManagedLaunchValueForMode(original, wrapperPath, appID, runtimePath string, mode linuwux.Mode) (string, error) {
+func ManagedLaunchValueForMode(original, wrapperPath, appID, runtimePath string, mode linuwux.Mode, params ...string) (string, error) {
 	if wrapperPath == "" || appID == "" {
 		return "", errors.New("wrapper path and App ID are required")
 	}
 	if !mode.Valid() {
 		return "", fmt.Errorf("invalid LinUwUx mode %q", mode)
+	}
+	if err := linuwux.ValidateParams(mode, params); err != nil {
+		return "", err
 	}
 	if mode == linuwux.ModeRuntime && (runtimePath == "" || !filepath.IsAbs(runtimePath)) {
 		return "", errors.New("runtime mode requires an absolute LinUwUx path")
@@ -41,10 +44,35 @@ func ManagedLaunchValueForMode(original, wrapperPath, appID, runtimePath string,
 	prefix := shellQuote(wrapperPath) + " run --app-id " + shellQuote(appID) + " --"
 	if mode == linuwux.ModeRuntime {
 		prefix += " " + shellQuote(runtimePath)
-	}
-	if mode == linuwux.ModeRuntime && strings.Contains(original, "%command%") {
 		environment, command := leadingEnvironment(original)
-		return environment + prefix + " " + strings.TrimSpace(command), nil
+		if environment != "" && !strings.HasSuffix(environment, " ") && !strings.HasSuffix(environment, "\t") {
+			environment += " "
+		}
+		for _, param := range params {
+			found := false
+			for rest := strings.TrimSpace(environment); rest != ""; {
+				end := shellTokenEnd(rest, 0)
+				name, value, _ := strings.Cut(rest[:end], "=")
+				if name == param {
+					if value != "1" && value != "'1'" && value != `"1"` {
+						return "", fmt.Errorf("%s conflicts with the existing launch options; edit them before enabling this param", param)
+					}
+					found = true
+				}
+				rest = strings.TrimSpace(rest[end:])
+			}
+			if !found {
+				environment += param + "=1 "
+			}
+		}
+		if !strings.Contains(command, "%command%") {
+			prefix += " %command%"
+		}
+		command = strings.TrimSpace(command)
+		if command == "" {
+			return environment + prefix, nil
+		}
+		return environment + prefix + " " + command, nil
 	}
 	prefix += " %command%"
 	if strings.Contains(original, "%command%") {
@@ -60,19 +88,19 @@ func (m *Manager) Enable(appID, name string, shortcut bool, currentLaunch string
 	return m.EnableWithMode(appID, name, shortcut, currentLaunch, linuwux.ModeProton)
 }
 
-func (m *Manager) EnableWithMode(appID, name string, shortcut bool, currentLaunch string, mode linuwux.Mode) (model.ManagedGame, error) {
+func (m *Manager) EnableWithMode(appID, name string, shortcut bool, currentLaunch string, mode linuwux.Mode, params ...string) (model.ManagedGame, error) {
 	if _, exists := m.Store.Game(appID); exists {
 		return model.ManagedGame{}, fmt.Errorf("App ID %s is already managed", appID)
 	}
 
-	managed, err := ManagedLaunchValueForMode(currentLaunch, m.WrapperPath, appID, m.RuntimePath, mode)
+	managed, err := ManagedLaunchValueForMode(currentLaunch, m.WrapperPath, appID, m.RuntimePath, mode, params...)
 	if err != nil {
 		return model.ManagedGame{}, err
 	}
 
 	game := model.ManagedGame{
 		AppID: appID, Name: name, Shortcut: shortcut, OriginalLaunch: currentLaunch,
-		ManagedLaunch: managed, WrapperPath: m.WrapperPath, Mode: mode,
+		ManagedLaunch: managed, WrapperPath: m.WrapperPath, Mode: mode, Params: params,
 	}
 	if err := m.Store.PutGame(game); err != nil {
 		return model.ManagedGame{}, err

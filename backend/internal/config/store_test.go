@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"testing"
 
 	"hv-launcher/internal/linuwux"
@@ -69,13 +71,13 @@ func TestStoreRollsBackMemoryWhenPersistenceFails(t *testing.T) {
 	if err := store.PutGame(model.ManagedGame{AppID: "10", Name: "Changed"}); err == nil {
 		t.Fatal("replacement unexpectedly succeeded")
 	}
-	if game, _ := store.Game("10"); game != original {
+	if game, _ := store.Game("10"); !reflect.DeepEqual(game, original) {
 		t.Fatalf("failed replacement was not rolled back: %+v", game)
 	}
 	if err := store.DeleteGame("10"); err == nil {
 		t.Fatal("delete unexpectedly succeeded")
 	}
-	if game, ok := store.Game("10"); !ok || game != original {
+	if game, ok := store.Game("10"); !ok || !reflect.DeepEqual(game, original) {
 		t.Fatalf("failed delete was not rolled back: %+v, %v", game, ok)
 	}
 }
@@ -93,7 +95,7 @@ func TestOptionalModesRemainAbsentUntilExplicitlySaved(t *testing.T) {
 		t.Fatal(err)
 	}
 	game, ok := store.Game("10")
-	if !ok || game.Mode.ResolveLegacyMode() != linuwux.ModeProton || game.Mode != "" {
+	if !ok || game.Mode.ResolveLegacyMode() != linuwux.ModeProton || game.Mode != "" || len(game.Params) != 0 {
 		t.Fatalf("legacy mode = %q (resolved %q)", game.Mode, game.Mode.ResolveLegacyMode())
 	}
 	after, err := os.ReadFile(path)
@@ -105,6 +107,7 @@ func TestOptionalModesRemainAbsentUntilExplicitlySaved(t *testing.T) {
 	}
 
 	game.Mode = linuwux.ModeRuntime
+	game.Params = []string{"PROTON_AVX", "LINUWUX_LEGACY_PROFILE"}
 	if err := store.PutGame(game); err != nil {
 		t.Fatal(err)
 	}
@@ -112,8 +115,8 @@ func TestOptionalModesRemainAbsentUntilExplicitlySaved(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if saved, _ := reopened.Game("10"); saved.Mode != linuwux.ModeRuntime {
-		t.Fatalf("saved game mode = %q", saved.Mode)
+	if saved, _ := reopened.Game("10"); saved.Mode != linuwux.ModeRuntime || !slices.Equal(saved.Params, game.Params) {
+		t.Fatalf("saved game = %+v", saved)
 	}
 }
 

@@ -85,6 +85,46 @@ func TestRuntimeManagedLaunchValueRequiresAbsoluteRuntime(t *testing.T) {
 	}
 }
 
+func TestRuntimeParamsLaunchComposition(t *testing.T) {
+	prefix := `'/wrapper' run --app-id '42' -- '/runtime' `
+	for _, test := range []struct {
+		name, original, want string
+		params               []string
+	}{
+		{"multiple params before gamescope", `MANGOHUD=1 gamescope -f -- %command%`, `MANGOHUD=1 PROTON_AVX=1 LINUWUX_SYSCALL_HACK=1 ` + prefix + `gamescope -f -- %command%`, []string{"PROTON_AVX", "LINUWUX_SYSCALL_HACK"}},
+		{"existing selected assignment", `PROTON_AVX='1' %command%`, `PROTON_AVX='1' ` + prefix + `%command%`, []string{"PROTON_AVX"}},
+		{"manual params without selection", `LINUWUX_LEGACY_PROFILE=1 %command%`, `LINUWUX_LEGACY_PROFILE=1 ` + prefix + `%command%`, nil},
+		{"shortcut arguments", `lutris:rungameid/2`, `LINUWUX_WIN32U_FREE_GUARD=1 ` + prefix + `%command% lutris:rungameid/2`, []string{"LINUWUX_WIN32U_FREE_GUARD"}},
+		{"quoted existing environment", `MANGOHUD_CONFIG="fps_limit=60 30" %command%`, `MANGOHUD_CONFIG="fps_limit=60 30" LINUWUX_LEGACY_PROFILE=1 ` + prefix + `%command%`, []string{"LINUWUX_LEGACY_PROFILE"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := ManagedLaunchValueForMode(test.original, "/wrapper", "42", "/runtime", linuwux.ModeRuntime, test.params...)
+			if err != nil || got != test.want {
+				t.Fatalf("got %q, %v; want %q", got, err, test.want)
+			}
+		})
+	}
+
+	for _, test := range []struct {
+		name, original string
+		mode           linuwux.Mode
+		params         []string
+	}{
+		{"conflicting assignment", `PROTON_AVX=0 %command%`, linuwux.ModeRuntime, []string{"PROTON_AVX"}},
+		{"duplicate assignments with conflict", `PROTON_AVX=0 PROTON_AVX=1 %command%`, linuwux.ModeRuntime, []string{"PROTON_AVX"}},
+		{"unknown param", `%command%`, linuwux.ModeRuntime, []string{"LINUWUX_DEBUG"}},
+		{"shell injection", `%command%`, linuwux.ModeRuntime, []string{"PROTON_AVX; echo injected"}},
+		{"duplicate selection", `%command%`, linuwux.ModeRuntime, []string{"PROTON_AVX", "PROTON_AVX"}},
+		{"Proton selection", `%command%`, linuwux.ModeProton, []string{"PROTON_AVX"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := ManagedLaunchValueForMode(test.original, "/wrapper", "42", "/runtime", test.mode, test.params...); err == nil {
+				t.Fatal("invalid params were accepted")
+			}
+		})
+	}
+}
+
 func TestManagerDisablesManagement(t *testing.T) {
 	store, err := config.Open(filepath.Join(t.TempDir(), "settings"))
 	if err != nil {
