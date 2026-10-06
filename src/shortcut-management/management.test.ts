@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   availableModes,
   effectiveGameMode,
-  groupShortcuts,
+  shortcuts,
   isModeAvailable,
   shouldShowShortcutManagement
 } from '@/shortcut-management/management';
@@ -29,14 +29,13 @@ function game(overrides: Partial<Game>): Game {
     name: 'Shortcut',
     shortcut: true,
     enabled: false,
-    running: false,
     ...overrides
   };
 }
 
 describe('Shortcut management model', () => {
   it('filters native apps and groups shortcuts deterministically without a search model', () => {
-    const sections = groupShortcuts([
+    const sections = shortcuts([
       game({ appId: '3', name: 'Zulu', enabled: false }),
       game({ appId: '2', name: 'Alpha', enabled: true }),
       game({ appId: '4', name: 'Beta', enabled: false }),

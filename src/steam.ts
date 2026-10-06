@@ -1,47 +1,29 @@
+import type { Unregisterable } from '@decky/ui';
+import type {
+  AppDetails,
+  SteamAppOverview,
+  SteamAppOverviewRemoteClientData
+} from '@decky/ui/dist/globals/steam-client/App';
 import type { Configuration, Game, LinUwUxMode, LinUwUxParam } from '@/types';
 import { disableGame, enableGame, getConfiguration, postLifetime } from '@/api';
 
-interface Unregisterable {
-  unregister(): void;
-}
-
-interface LifetimeNotification {
-  unAppID: number;
-  nInstanceID: number;
-  bRunning: boolean;
-}
-
 export interface SteamBridge {
-  Apps: {
-    SetAppLaunchOptions(appId: number, value: string): void;
-    SetShortcutLaunchOptions(appId: number, value: string): void;
+  Apps: Pick<typeof SteamClient.Apps, 'SetAppLaunchOptions' | 'SetShortcutLaunchOptions'> & {
     RegisterForAppDetails?: (appId: number, callback: (details: SteamDetails) => void) => void | Unregisterable;
-    RegisterForAppOverviewChanges?: (callback: (data: ArrayBuffer) => void) => void | Unregisterable;
   };
-  GameSessions: {
-    RegisterForAppLifetimeNotifications(callback: (notification: LifetimeNotification) => void): Unregisterable;
-  };
+  GameSessions: Pick<typeof SteamClient.GameSessions, 'RegisterForAppLifetimeNotifications'>;
 }
 
-interface SteamDetails {
-  strLaunchOptions?: string;
-  strShortcutLaunchOptions?: string;
-}
+type SteamDetails = Partial<Pick<AppDetails, 'strLaunchOptions' | 'strShortcutLaunchOptions'>>;
 
 interface SteamDetailsStore {
   GetAppDetails(appId: number): SteamDetails | null;
 }
 
-interface SteamPerClientData {
-  display_status?: number;
-  installed?: boolean;
-}
+type SteamPerClientData = Partial<Pick<SteamAppOverviewRemoteClientData, 'display_status' | 'installed'>>;
 
-export interface MaterializedAppOverview {
-  appid: number;
-  display_name: string;
-  app_type: number;
-  visible_in_game_list: boolean;
+export interface MaterializedAppOverview
+  extends Pick<SteamAppOverview, 'appid' | 'display_name' | 'app_type' | 'visible_in_game_list'> {
   per_client_data?: SteamPerClientData[];
   local_per_client_data?: SteamPerClientData;
   most_available_per_client_data?: SteamPerClientData;
@@ -58,7 +40,7 @@ const APP_TYPE_SHORTCUT = 0x40000000;
 
 export class SteamLibraryLoadingError extends Error {
   constructor() {
-    super("Steam's library is still loading.");
+    super('Steam library data is unavailable.');
   }
 }
 
@@ -94,8 +76,7 @@ export function discoverGames(
       appId,
       name: app.display_name,
       shortcut,
-      enabled: configuration.games[appId] !== undefined,
-      running: normalizeDisplayState(overviewDisplayStatus(app)) !== 'idle'
+      enabled: configuration.games[appId] !== undefined
     });
   }
 
@@ -106,12 +87,11 @@ export function discoverGames(
         name: record.name,
         shortcut: record.shortcut,
         enabled: true,
-        running: false,
         missing: true
       });
     }
   }
-  return [...games.values()].sort((left, right) => left.name.localeCompare(right.name));
+  return [...games.values()];
 }
 
 export async function readLaunchValue(
@@ -265,9 +245,4 @@ export function observeSteamLifetime(options: LifetimeObserverOptions = {}): () 
     for (const timer of timers) cancel(timer);
     timers.clear();
   };
-}
-
-export function observeSteamOverviews(onOverview: () => void, bridge: SteamBridge = SteamClient): () => void {
-  const registration = bridge.Apps.RegisterForAppOverviewChanges?.(() => onOverview());
-  return () => registration?.unregister();
 }

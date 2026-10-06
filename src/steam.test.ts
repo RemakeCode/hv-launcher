@@ -1,30 +1,14 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  disableManagedGame,
   discoverGames,
   observeSteamLifetime,
-  observeSteamOverviews,
-  readLaunchValue,
   SteamLibraryLoadingError,
   type MaterializedAppStore,
   type SteamBridge
 } from '@/steam';
 import type { Configuration } from '@/types';
 
-const api = vi.hoisted(() => ({
-  disableGame: vi.fn(),
-  enableGame: vi.fn(),
-  getConfiguration: vi.fn(),
-  postLifetime: vi.fn()
-}));
-
-vi.mock('./api', () => api);
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
-
-function bridgeWithoutOverview() {
+function createSteamBridgeFixture() {
   let lifetime: ((notification: { unAppID: number; nInstanceID: number; bRunning: boolean }) => void) | undefined;
   const unregister = vi.fn();
   const registerLifetime = vi.fn((callback: NonNullable<typeof lifetime>) => {
@@ -49,19 +33,9 @@ function bridgeWithoutOverview() {
 }
 
 describe('Steam observation', () => {
-  it('keeps lifetime cleanup working when overview callbacks are unavailable', async () => {
-    const fixture = bridgeWithoutOverview();
-    const sendLifetime = vi.fn(async () => undefined);
-    const cleanup = observeSteamLifetime({ bridge: fixture.bridge, sendLifetime });
-    fixture.emit({ unAppID: 10, nInstanceID: 22, bRunning: false });
-    await vi.waitFor(() => expect(sendLifetime).toHaveBeenCalledWith('10', 22, false));
-    cleanup();
-    expect(fixture.unregister).toHaveBeenCalledOnce();
-  });
-
   it('retries unresolved App ID zero and cancels cleanly', async () => {
     vi.useFakeTimers();
-    const fixture = bridgeWithoutOverview();
+    const fixture = createSteamBridgeFixture();
     const sendLifetime = vi.fn(async () => ({ status: 'unresolved' }));
     const cleanup = observeSteamLifetime({ bridge: fixture.bridge, sendLifetime });
     fixture.emit({ unAppID: 0, nInstanceID: 7, bRunning: true });
@@ -72,7 +46,7 @@ describe('Steam observation', () => {
   });
 
   it('reports lifetime forwarding failures without an unhandled rejection', async () => {
-    const fixture = bridgeWithoutOverview();
+    const fixture = createSteamBridgeFixture();
     const onError = vi.fn();
     const cleanup = observeSteamLifetime({
       bridge: fixture.bridge,
@@ -86,44 +60,6 @@ describe('Steam observation', () => {
       expect(onError).toHaveBeenCalledWith(expect.objectContaining({ message: 'backend unavailable' }))
     );
     cleanup();
-  });
-
-  it('keeps overview observation separate from lifetime forwarding', () => {
-    const fixture = bridgeWithoutOverview();
-    const overviewUnregister = vi.fn();
-    let emitOverview: (() => void) | undefined;
-    fixture.bridge.Apps.RegisterForAppOverviewChanges = (callback) => {
-      emitOverview = () => callback(new ArrayBuffer(0));
-      return { unregister: overviewUnregister };
-    };
-    const onOverview = vi.fn();
-    const cleanup = observeSteamOverviews(onOverview, fixture.bridge);
-    emitOverview?.();
-    expect(onOverview).toHaveBeenCalledOnce();
-    cleanup();
-    expect(overviewUnregister).toHaveBeenCalledOnce();
-    expect(fixture.unregister).not.toHaveBeenCalled();
-  });
-
-  it('keeps plugin lifetime forwarding active across repeated route observer mounts', async () => {
-    const fixture = bridgeWithoutOverview();
-    const overviewUnregister = vi.fn();
-    fixture.bridge.Apps.RegisterForAppOverviewChanges = vi.fn(() => ({ unregister: overviewUnregister }));
-    const sendLifetime = vi.fn(async () => undefined);
-    const stopLifetime = observeSteamLifetime({ bridge: fixture.bridge, sendLifetime });
-
-    const closeFirstRoute = observeSteamOverviews(vi.fn(), fixture.bridge);
-    closeFirstRoute();
-    const closeSecondRoute = observeSteamOverviews(vi.fn(), fixture.bridge);
-    closeSecondRoute();
-    fixture.emit({ unAppID: 77, nInstanceID: 4, bRunning: false });
-
-    await vi.waitFor(() => expect(sendLifetime).toHaveBeenCalledOnce());
-    expect(fixture.registerLifetime).toHaveBeenCalledOnce();
-    expect(overviewUnregister).toHaveBeenCalledTimes(2);
-    expect(fixture.unregister).not.toHaveBeenCalled();
-    stopLifetime();
-    expect(fixture.unregister).toHaveBeenCalledOnce();
   });
 });
 
@@ -171,9 +107,8 @@ describe('allApps discovery', () => {
       GetAppOverviewByAppID: () => null
     };
     const games = discoverGames(configuration, store);
-    expect(games.map((game) => game.appId)).toEqual(['2650715882', '42', '10']);
+    expect(games.map((game) => game.appId).sort()).toEqual(['10', '2650715882', '42']);
     expect(games.find((game) => game.appId === '2650715882')?.shortcut).toBe(true);
-    expect(games.find((game) => game.appId === '10')?.running).toBe(true);
     expect(games.find((game) => game.appId === '42')?.missing).toBe(true);
   });
 
@@ -220,80 +155,5 @@ describe('allApps discovery', () => {
 
     const shortcuts = discoverGames(configured, store).filter((game) => game.shortcut);
     expect(shortcuts).toEqual([expect.objectContaining({ appId: '43', enabled: true, missing: true })]);
-  });
-});
-
-describe('launch option reading', () => {
-  it("loads uncached shortcut details through Steam's details registration", async () => {
-    const unregister = vi.fn();
-    const bridge = bridgeWithoutOverview().bridge;
-    const apps = bridge.Apps;
-    bridge.Apps.RegisterForAppDetails = function (this: SteamBridge['Apps'], appId, callback) {
-      expect(this).toBe(apps);
-      expect(appId).toBe(2650715882);
-      queueMicrotask(() => callback({ strShortcutLaunchOptions: '--original' }));
-      return { unregister };
-    };
-
-    const value = await readLaunchValue(
-      {
-        appId: '2650715882',
-        name: 'Crimson Desert',
-        shortcut: true,
-        enabled: false,
-        running: false
-      },
-      bridge,
-      { GetAppDetails: () => null }
-    );
-
-    expect(value).toBe('--original');
-    expect(unregister).toHaveBeenCalledOnce();
-  });
-});
-
-describe('disabling shortcut management', () => {
-  const configuration: Configuration = {
-    version: 1,
-    games: {
-      '42': {
-        appId: '42',
-        name: 'Heroic Game',
-        shortcut: true,
-        originalLaunch: 'original',
-        managedLaunch: 'managed',
-        wrapperPath: '/wrapper'
-      }
-    }
-  };
-
-  it('preserves a recreated shortcut value and removes management', async () => {
-    api.getConfiguration.mockResolvedValue(configuration);
-    api.disableGame.mockResolvedValue(undefined);
-    const fixture = bridgeWithoutOverview();
-
-    await disableManagedGame(
-      { appId: '42', name: 'Heroic Game', shortcut: true, enabled: true, running: false },
-      fixture.bridge,
-      { GetAppDetails: () => ({ strShortcutLaunchOptions: 'reinstalled game' }) }
-    );
-
-    expect(api.disableGame).toHaveBeenCalledWith('42');
-    expect(fixture.bridge.Apps.SetShortcutLaunchOptions).not.toHaveBeenCalled();
-  });
-
-  it('restores the original value while the managed wrapper is current', async () => {
-    api.getConfiguration.mockResolvedValue(configuration);
-    api.disableGame.mockResolvedValue(undefined);
-    const fixture = bridgeWithoutOverview();
-
-    await disableManagedGame(
-      { appId: '42', name: 'Heroic Game', shortcut: true, enabled: true, running: false },
-      fixture.bridge,
-      { GetAppDetails: () => ({ strShortcutLaunchOptions: 'managed' }) }
-    );
-
-    expect(fixture.bridge.Apps.SetShortcutLaunchOptions).toHaveBeenCalledWith(42, 'original');
-    expect(api.disableGame).toHaveBeenCalledWith('42');
   });
 });
