@@ -1,7 +1,6 @@
 import { FileSelectionType, openFilePicker } from '@decky/api';
 import {
     ConfirmModal,
-    DialogLabel,
     DialogButton,
     DropdownItem,
     Field,
@@ -36,12 +35,6 @@ const SETUP_INTERRUPTION_WARNING =
     'Do not update or uninstall HV Launcher, restart Decky Loader, or power off the system until installation finishes.';
 // Decky filters by the final suffix; exact multi-suffix validation happens after selection.
 const PROTON_PICKER_EXTENSIONS = ['gz', 'tgz', 'xz'];
-
-const protonSetupStyles = `
-    .hv-proton-description {
-        margin-bottom: 8px;
-    }
-`;
 
 function ProtonSelection({ draft, onDraft }: Pick<ProtonSetupProps, 'draft' | 'onDraft'>) {
     const selection = draft.selection;
@@ -168,13 +161,8 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
 
     return (
         <PanelSection title='Proton'>
-            <style>{protonSetupStyles}</style>
-            <DialogLabel className='hv-proton-description'>
-                Uses a LinUwUx-patched Proton build.
-            </DialogLabel>
-
             <Field
-                label='Installed supported builds'
+                label='Installed Proton builds'
                 description={
                     installedTools.length > 0
                         ? installedTools.map((tool) => <div key={tool}>{tool}</div>)
@@ -195,7 +183,7 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
 
             <Field
                 label={installedTools.length > 0 ? 'Install another build' : 'Install a build'}
-                description='Choose the Proton archive you obtained from the release source. Full validation happens during installation.'
+                description='Install a LinUwUx-patched Proton archive into Steam.'
                 inlineWrap='shift-children-below'
             >
                 {!progressVisible && (
@@ -203,11 +191,7 @@ export function ProtonSetup({ draft, installedTools, mutationActive, onDraft }: 
                         disabled={mutationActive || draft.stage === 'selecting'}
                         onClick={() => void selectArchive()}
                     >
-                        {draft.selection
-                            ? 'Choose another archive'
-                            : installedTools.length > 0
-                              ? 'Choose another Proton archive'
-                              : 'Choose Proton archive'}
+                        {draft.selection ? 'Choose another archive' : 'Choose archive'}
                     </DialogButton>
                 )}
             </Field>
