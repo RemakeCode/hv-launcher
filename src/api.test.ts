@@ -38,11 +38,17 @@ describe('Shortcut activation method API', () => {
 
   it('submits only per-game method fields', async () => {
     fetchMock.mockImplementation(async () => new Response('{}'));
-    await enableGame('42', 'Game', true, '%command%', 'runtime');
+    await enableGame('42', 'Game', true, '%command%', 'runtime', ['PROTON_AVX', 'LINUWUX_SYSCALL_HACK']);
 
     expect(fetchMock).toHaveBeenNthCalledWith(1, `${BASE_URL}/games/42/enable`, {
       method: 'POST',
-      body: JSON.stringify({ name: 'Game', shortcut: true, currentLaunch: '%command%', mode: 'runtime' }),
+      body: JSON.stringify({
+        name: 'Game',
+        shortcut: true,
+        currentLaunch: '%command%',
+        mode: 'runtime',
+        params: ['PROTON_AVX', 'LINUWUX_SYSCALL_HACK']
+      }),
       headers: { 'Content-Type': 'application/json' }
     });
   });
