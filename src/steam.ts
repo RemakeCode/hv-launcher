@@ -1,4 +1,4 @@
-import type { Configuration, Game, LinUwUxMode } from '@/types';
+import type { Configuration, Game, LinUwUxMode, LinUwUxParam } from '@/types';
 import { disableGame, enableGame, getConfiguration, postLifetime } from '@/api';
 
 interface Unregisterable {
@@ -160,10 +160,11 @@ export function setLaunchValue(game: Game, value: string, bridge: SteamBridge = 
 export async function enableManagedGame(
   game: Game,
   mode?: LinUwUxMode,
+  params: LinUwUxParam[] = [],
   bridge: SteamBridge = SteamClient
 ): Promise<void> {
   const original = await readLaunchValue(game, bridge);
-  const managed = await enableGame(game.appId, game.name, game.shortcut, original, mode);
+  const managed = await enableGame(game.appId, game.name, game.shortcut, original, mode, params);
   try {
     setLaunchValue(game, managed.managedLaunch, bridge);
   } catch (error) {

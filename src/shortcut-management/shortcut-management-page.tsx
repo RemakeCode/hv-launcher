@@ -28,10 +28,16 @@ import {
   observeSteamOverviews,
   SteamLibraryLoadingError
 } from '@/steam';
-import type { Configuration, DisplayState, Game, LinUwUxMode, SystemStatus } from '@/types';
+import type { Configuration, DisplayState, Game, LinUwUxMode, LinUwUxParam, SystemStatus } from '@/types';
 import { GiGamepad } from 'react-icons/gi';
 
 const EMPTY_CONFIGURATION: Configuration = { version: 1, games: {} };
+const LINUWUX_PARAMS: { name: LinUwUxParam; label: string }[] = [
+  { name: 'PROTON_AVX', label: 'AVX' },
+  { name: 'LINUWUX_SYSCALL_HACK', label: 'Syscall workaround' },
+  { name: 'LINUWUX_LEGACY_PROFILE', label: 'Legacy profile' },
+  { name: 'LINUWUX_WIN32U_FREE_GUARD', label: 'Free guard' }
+];
 
 const shortcutManagementStyles = `
   .hv-shortcut-error {
@@ -72,6 +78,16 @@ const shortcutManagementStyles = `
   .hv-shortcut-empty {
     margin-block-start: 8px;
   }
+
+  .hv-shortcut-params {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .hv-shortcut-param {
+    flex: 1 1 180px;
+  }
 `;
 
 function modeLabel(mode: LinUwUxMode): string {
@@ -87,6 +103,7 @@ export function ShortcutManagementPage() {
   const [libraryMessage, setLibraryMessage] = useState('');
   const [configuration, setConfiguration] = useState<Configuration>(EMPTY_CONFIGURATION);
   const [selections, setSelections] = useState<Record<string, LinUwUxMode>>({});
+  const [params, setParams] = useState<Record<string, LinUwUxParam[]>>({});
   const configurationRef = useRef<Configuration>(EMPTY_CONFIGURATION);
 
   const refreshLibrary = useCallback((configuration: Configuration) => {
@@ -145,8 +162,13 @@ export function ShortcutManagementPage() {
       if (enabled && !isModeAvailable(status!, mode)) {
         throw new Error(`${modeLabel(mode)} setup is required before enabling this shortcut.`);
       }
-      if (enabled) await enableManagedGame(game, mode);
-      else await disableManagedGame(game);
+      if (enabled) {
+        await enableManagedGame(game, mode, mode === 'runtime' ? (params[game.appId] ?? []) : []);
+      } else {
+        await disableManagedGame(game);
+        setSelections((current) => ({ ...current, [game.appId]: effectiveGameMode(configuration, game.appId) }));
+        setParams((current) => ({ ...current, [game.appId]: configuration.games[game.appId]?.params ?? [] }));
+      }
       await refresh();
     } catch (reason) {
       logger.error(`Failed to ${enabled ? 'enable' : 'disable'} ${game.name}`, reason);
@@ -172,43 +194,78 @@ export function ShortcutManagementPage() {
       ? effectiveGameMode(configuration, game.appId)
       : (selections[game.appId] ?? availableModes(status!)[0] ?? 'proton');
     const available = isModeAvailable(status!, selected);
+    const selectedParams = game.enabled ? (configuration.games[game.appId]?.params ?? []) : (params[game.appId] ?? []);
     const options: LinUwUxMode[] = ['proton', 'runtime'];
     const description = [
       shortcutDescription(game, states[game.appId] ?? 'idle', busy === game.appId),
-      game.enabled ? 'Disable to change the LinUwUx method.' : undefined,
+      game.enabled && selected === 'runtime' && selectedParams.length > 0
+        ? `LinUwUx params: ${selectedParams.map((param) => `${param}=1`).join(', ')}`
+        : undefined,
       !available ? 'Selected method requires setup.' : undefined
     ]
       .filter(Boolean)
       .join(' ');
     return (
-      <Field
-        key={game.appId}
-        label={game.name}
-        description={description}
-        childrenLayout='inline'
-        childrenContainerWidth='min'
-        verticalAlignment='center'
-      >
-        <div className='hv-shortcut-actions'>
-          <Dropdown
-            menuLabel='LinUwUx method'
-            rgOptions={options.map((mode) => ({
-              data: mode,
-              label: `${modeLabel(mode)}${isModeAvailable(status!, mode) ? '' : ' · setup required'}`
-            }))}
-            selectedOption={selected}
-            disabled={game.enabled || busy !== undefined || game.missing}
-            onChange={(option) => changeMode(game, String(option.data) as LinUwUxMode)}
-          />
-          <div className='hv-shortcut-toggle'>
-            <Toggle
-              value={game.enabled}
-              disabled={busy !== undefined || (!game.enabled && !available)}
-              onChange={(enabled) => void toggle(game, enabled)}
+      <div key={game.appId}>
+        <Field
+          label={game.name}
+          description={description}
+          childrenLayout='inline'
+          childrenContainerWidth='min'
+          verticalAlignment='center'
+        >
+          <div className='hv-shortcut-actions'>
+            <Dropdown
+              menuLabel='LinUwUx method'
+              rgOptions={options.map((mode) => ({
+                data: mode,
+                label: `${modeLabel(mode)}${isModeAvailable(status!, mode) ? '' : ' · setup required'}`
+              }))}
+              selectedOption={selected}
+              disabled={game.enabled || busy !== undefined || game.missing}
+              onChange={(option) => changeMode(game, String(option.data) as LinUwUxMode)}
             />
+            <div className='hv-shortcut-toggle'>
+              <Toggle
+                value={game.enabled}
+                disabled={busy !== undefined || (!game.enabled && !available)}
+                onChange={(enabled) => void toggle(game, enabled)}
+              />
+            </div>
           </div>
-        </div>
-      </Field>
+        </Field>
+        {!game.enabled && selected === 'runtime' && (
+          <Field
+            label='LinUwUx params'
+            description='Optional runtime variables. Only enable these if you understand what they do or your game’s compatibility instructions require them. Leave them off otherwise.'
+            childrenLayout='below'
+          >
+            <div className='hv-shortcut-params'>
+              {LINUWUX_PARAMS.map((param) => (
+                <Field key={param.name} label={param.label} className='hv-shortcut-param' childrenContainerWidth='min'>
+                  <div className='hv-shortcut-toggle'>
+                    <Toggle
+                      value={selectedParams.includes(param.name)}
+                      disabled={busy !== undefined || game.missing}
+                      onChange={(enabled) => {
+                        setParams((current) => {
+                          const currentParams = current[game.appId] ?? [];
+                          return {
+                            ...current,
+                            [game.appId]: LINUWUX_PARAMS.map(({ name }) => name).filter((name) =>
+                              name === param.name ? enabled : currentParams.includes(name)
+                            )
+                          };
+                        });
+                      }}
+                    />
+                  </div>
+                </Field>
+              ))}
+            </div>
+          </Field>
+        )}
+      </div>
     );
   };
 

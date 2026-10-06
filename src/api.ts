@@ -10,7 +10,8 @@ import type {
   UMIPInspection,
   ModulePreflight,
   ModuleTestResponse,
-  LinUwUxMode
+  LinUwUxMode,
+  LinUwUxParam
 } from '@/types';
 
 export const BASE_URL = 'http://127.0.0.1:42991/v1';
@@ -20,12 +21,20 @@ const fetcher = new Fetcher(BASE_URL);
 
 export const getStatus = () => fetcher.get<SystemStatus>('/status');
 export const getConfiguration = () => fetcher.get<Configuration>('/config');
-export const enableGame = (appId: string, name: string, shortcut: boolean, currentLaunch: string, mode?: LinUwUxMode) =>
+export const enableGame = (
+  appId: string,
+  name: string,
+  shortcut: boolean,
+  currentLaunch: string,
+  mode?: LinUwUxMode,
+  params: LinUwUxParam[] = []
+) =>
   fetcher.post<ManageResponse>(`/games/${appId}/enable`, {
     name,
     shortcut,
     currentLaunch,
-    ...(mode ? { mode } : {})
+    ...(mode ? { mode } : {}),
+    ...(params.length > 0 ? { params } : {})
   });
 export const disableGame = (appId: string) => fetcher.post<void>(`/games/${appId}/disable`, {});
 export const postLifetime = (appId: string, instanceId: number, running: boolean) =>

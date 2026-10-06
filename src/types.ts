@@ -55,6 +55,8 @@ export interface SystemStatus {
 }
 
 export type LinUwUxMode = 'proton' | 'runtime';
+export type LinUwUxParam =
+  'PROTON_AVX' | 'LINUWUX_SYSCALL_HACK' | 'LINUWUX_LEGACY_PROFILE' | 'LINUWUX_WIN32U_FREE_GUARD';
 export type RuntimeState = 'absent' | 'available' | 'invalid' | 'unsupported';
 
 export interface RuntimeStatus {
@@ -104,6 +106,7 @@ export interface ManagedGame {
   managedLaunch: string;
   wrapperPath: string;
   mode?: LinUwUxMode;
+  params?: LinUwUxParam[];
 }
 
 export interface Configuration {
