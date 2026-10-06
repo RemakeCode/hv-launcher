@@ -1,4 +1,4 @@
-import { DialogButton, DialogLabel, Navigation, Field, PanelSection, SidebarNavigation } from '@decky/ui';
+import { DialogButton, Navigation, Field, PanelSection, SidebarNavigation } from '@decky/ui';
 import { useCallback, useEffect, useReducer, useState } from 'react';
 import { FaCheckCircle, FaExclamationTriangle, FaPuzzlePiece, FaShieldAlt, FaWineBottle } from 'react-icons/fa';
 import type { IconType } from 'react-icons';
@@ -193,20 +193,26 @@ export function ReadinessWorkspace() {
             onDraft={dispatchProton}
           />
           <PanelSection title='LinUwUx runtime'>
-            <DialogLabel>
-              {status.linuwux?.runtime?.detail ??
-                (!status.linuwux ? 'Reload the plugin with the updated backend to detect the runtime.' : undefined)}
-            </DialogLabel>
-            <DialogLabel>
-              Install and update the runtime using the upstream instructions, then refresh here. Flatpak launchers must
-              be able to read the wrapper and library.
-            </DialogLabel>
-            <DialogButton
-              onClick={() => Navigation.NavigateToExternalWeb('https://github.com/brcly/linuwux-runtime#install')}
+            <Field
+              label={status.linuwux?.runtime?.available ? 'Runtime detected' : 'Runtime unavailable'}
+              description={
+                status.linuwux?.runtime?.available
+                  ? 'Ready for shortcuts using the LinUwUx runtime.'
+                  : (status.linuwux?.runtime?.detail ??
+                    'Reload the plugin with the updated backend to detect the runtime.')
+              }
+            />
+            <Field
+              label='Installation and updates'
+              description='Follow the upstream instructions. Flatpak launchers need access to the wrapper and library.'
+              inlineWrap='shift-children-below'
             >
-              LinUwUx by brcly — installation instructions
-            </DialogButton>
-            <DialogButton onClick={() => void refresh()}>Refresh status</DialogButton>
+              <DialogButton
+                onClick={() => Navigation.NavigateToExternalWeb('https://github.com/brcly/linuwux-runtime#install')}
+              >
+                Open instructions
+              </DialogButton>
+            </Field>
           </PanelSection>
         </>
       ) : check.id === 'umip' ? (
