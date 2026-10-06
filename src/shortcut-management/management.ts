@@ -33,7 +33,7 @@ export function isModeAvailable(status: SystemStatus, mode: LinUwUxMode): boolea
     : status.linuwux?.runtime?.available === true;
 }
 
-export function groupShortcuts(games: Game[]): ShortcutSections {
+export function shortcuts(games: Game[]): ShortcutSections {
   const shortcuts = games.filter((game) => game.shortcut).sort((left, right) => left.name.localeCompare(right.name));
   return {
     managed: shortcuts.filter((game) => game.enabled),

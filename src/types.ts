@@ -94,7 +94,6 @@ export interface Game {
   name: string;
   shortcut: boolean;
   enabled: boolean;
-  running: boolean;
   missing?: boolean;
 }
 
