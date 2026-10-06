@@ -37,7 +37,7 @@ func (s *Service) enableGame(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, err)
 		return
 	}
-	managed, err := s.options.Manager.EnableWithMode(appID, request.Name, request.Shortcut, request.CurrentLaunch, mode)
+	managed, err := s.options.Manager.EnableWithMode(appID, request.Name, request.Shortcut, request.CurrentLaunch, mode, request.Params...)
 	if err != nil {
 		s.options.Logger.Error("failed to enable shortcut management", "app_id", appID, "name", request.Name, "error", err)
 		writeError(w, http.StatusConflict, err)

@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 
+	"hv-launcher/internal/linuwux"
 	"hv-launcher/internal/model"
 )
 
@@ -90,6 +92,7 @@ func (s *Store) Snapshot() model.ConfigDocument {
 	defer s.mu.RUnlock()
 	games := make(map[string]model.ManagedGame, len(s.doc.Games))
 	for id, game := range s.doc.Games {
+		game.Params = slices.Clone(game.Params)
 		games[id] = game
 	}
 
@@ -100,6 +103,7 @@ func (s *Store) Game(appID string) (model.ManagedGame, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	game, ok := s.doc.Games[appID]
+	game.Params = slices.Clone(game.Params)
 	return game, ok
 }
 
@@ -107,6 +111,10 @@ func (s *Store) PutGame(game model.ManagedGame) error {
 	if game.Mode != "" && !game.Mode.Valid() {
 		return fmt.Errorf("invalid LinUwUx mode %q", game.Mode)
 	}
+	if err := linuwux.ValidateParams(game.Mode.ResolveLegacyMode(), game.Params); err != nil {
+		return err
+	}
+	game.Params = slices.Clone(game.Params)
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

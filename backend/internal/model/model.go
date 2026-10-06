@@ -164,6 +164,7 @@ type ManagedGame struct {
 	ManagedLaunch  string       `json:"managedLaunch"`
 	WrapperPath    string       `json:"wrapperPath"`
 	Mode           linuwux.Mode `json:"mode,omitempty"`
+	Params         []string     `json:"params,omitempty"`
 }
 
 type ConfigDocument struct {
@@ -176,6 +177,7 @@ type ManageGameRequest struct {
 	Shortcut      bool         `json:"shortcut"`
 	CurrentLaunch string       `json:"currentLaunch"`
 	Mode          linuwux.Mode `json:"mode,omitempty"`
+	Params        []string     `json:"params,omitempty"`
 }
 
 type ManageGameResponse struct {

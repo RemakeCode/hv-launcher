@@ -5,6 +5,7 @@ import (
 	"hv-launcher/internal/linuwux"
 	"hv-launcher/internal/model"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -58,5 +59,32 @@ func TestUnavailableMethodIsRejectedWithoutPersistence(t *testing.T) {
 	}
 	if _, ok := store.Game("10"); ok {
 		t.Fatal("unavailable runtime mode was persisted")
+	}
+}
+
+func TestRuntimeParamsAreSavedOnlyOnSuccessfulEnable(t *testing.T) {
+	service, _, store, _ := newTestService(t)
+	service.options.Inspector.Runtime = availableTestRuntime()
+	original := `MANGOHUD=1 gamescope -f -- %command%`
+	response := perform(service.Handler(), http.MethodPost, "/v1/games/10/enable", `{"name":"Game","shortcut":true,"currentLaunch":"MANGOHUD=1 gamescope -f -- %command%","mode":"runtime","params":["PROTON_AVX","LINUWUX_SYSCALL_HACK"]}`)
+	if response.Code != http.StatusOK {
+		t.Fatalf("enable returned %d: %s", response.Code, response.Body.String())
+	}
+	game, _ := store.Game("10")
+	if !slices.Equal(game.Params, []string{"PROTON_AVX", "LINUWUX_SYSCALL_HACK"}) || game.OriginalLaunch != original || !strings.HasPrefix(game.ManagedLaunch, "MANGOHUD=1 PROTON_AVX=1 LINUWUX_SYSCALL_HACK=1 ") {
+		t.Fatalf("managed game = %+v", game)
+	}
+	for _, body := range []string{
+		`{"name":"Game","mode":"runtime","params":["LINUWUX_DEBUG"]}`,
+		`{"name":"Game","mode":"proton","params":["PROTON_AVX"]}`,
+		`{"name":"Game","mode":"runtime","currentLaunch":"PROTON_AVX=0 %command%","params":["PROTON_AVX"]}`,
+	} {
+		response := perform(service.Handler(), http.MethodPost, "/v1/games/11/enable", body)
+		if response.Code != http.StatusConflict {
+			t.Fatalf("invalid params returned %d: %s", response.Code, response.Body.String())
+		}
+		if _, exists := store.Game("11"); exists {
+			t.Fatal("invalid params were persisted")
+		}
 	}
 }
