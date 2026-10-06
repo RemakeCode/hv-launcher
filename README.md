@@ -64,6 +64,8 @@ Some setup changes require restarting Steam or rebooting the system before readi
 
 Install and update the runtime using the [upstream instructions](https://github.com/brcly/linuwux-runtime#install), then refresh Readiness. HV Launcher detects the Decky user's `~/.local/bin/linuwux` and `~/.local/share/linuwux/LinUwUx.so`. Games continue to use their existing Wine/Proton runner; Flatpak launchers must be able to access both files.
 
+Selecting Runtime for a disabled shortcut exposes optional LinUwUx params. Leave them off unless you understand them or the game's compatibility instructions require them. Enabled shortcuts show the selected variables as text; disable the shortcut to change them. HV Launcher places them before the runtime and restores the original launch options when management is disabled, subject to existing external-edit protection.
+
 Choose **Patched Proton** or **LinUwUx runtime** beside the shortcut's enable toggle. To change an enabled shortcut's method, disable it, select the new method, then enable it again. Existing records without a method retain patched Proton behavior and their saved launch options.
 
 Runtime launches use absolute paths in the order HV Launcher → LinUwUx → the original command, including Gamescope when present. Original options are restored on disable only if Steam still contains HV Launcher's managed value; external edits are preserved.
