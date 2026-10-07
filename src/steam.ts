@@ -22,8 +22,10 @@ interface SteamDetailsStore {
 
 type SteamPerClientData = Partial<Pick<SteamAppOverviewRemoteClientData, 'display_status' | 'installed'>>;
 
-export interface MaterializedAppOverview
-  extends Pick<SteamAppOverview, 'appid' | 'display_name' | 'app_type' | 'visible_in_game_list'> {
+export interface MaterializedAppOverview extends Pick<
+  SteamAppOverview,
+  'appid' | 'display_name' | 'app_type' | 'visible_in_game_list'
+> {
   per_client_data?: SteamPerClientData[];
   local_per_client_data?: SteamPerClientData;
   most_available_per_client_data?: SteamPerClientData;
@@ -153,11 +155,7 @@ export async function enableManagedGame(
   }
 }
 
-export async function disableManagedGame(
-  game: Game,
-  bridge: SteamBridge = SteamClient,
-  store: SteamDetailsStore | undefined = detailsStore()
-): Promise<void> {
+export async function disableManagedGame(game: Game, bridge: SteamBridge = SteamClient): Promise<void> {
   const config = await getConfiguration();
   const record = config.games[game.appId];
   if (!record) return;
@@ -165,12 +163,6 @@ export async function disableManagedGame(
     await disableGame(game.appId);
     return;
   }
-  const current = await readLaunchValue(game, bridge, store);
-  if (current !== record.managedLaunch) {
-    await disableGame(game.appId);
-    return;
-  }
-
   setLaunchValue(game, record.originalLaunch, bridge);
   try {
     await disableGame(game.appId);
