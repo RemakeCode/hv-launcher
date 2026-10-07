@@ -6,8 +6,9 @@ import {
   DialogLabel,
   Dropdown,
   Field,
-  Toggle,
-  ToggleField
+  Focusable,
+  NavEntryPositionPreferences,
+  Toggle
 } from '@decky/ui';
 import { useCallback, useEffect, useState } from 'react';
 import { getConfiguration, getStatus } from '@/api';
@@ -32,6 +33,7 @@ const LINUWUX_PARAMS: { name: LinUwUxParam; tooltip: string }[] = [
   { name: 'LINUWUX_WIN32U_FREE_GUARD', tooltip: 'Protects against duplicate memory frees in win32u.' }
 ];
 
+//language=css
 const shortcutManagementStyles = `
   .hv-shortcut-page {
     padding: 54px 2.4vw;
@@ -67,15 +69,12 @@ const shortcutManagementStyles = `
   }
 
   .hv-shortcut-guidance {
-    font-size: 12px;
-    opacity: 0.7;
-    margin:0;
+    margin-block-start: 16px;
   }
 
   .hv-shortcut-summary {
-    overflow-wrap: anywhere;
-    font-size: 12px;
-    opacity: 0.7;
+    font-size: 95%;
+    opacity: 0.65;
     margin-block-start: 4px;
   }
 
@@ -95,7 +94,7 @@ const shortcutManagementStyles = `
     flex-shrink: 0;
   }
 
-  .hv-shortcut-actions > :first-child {
+  .hv-shortcut-actions > :first-child:not(.hv-shortcut-toggle) {
     width: 220px;
   }
 
@@ -117,13 +116,23 @@ const shortcutManagementStyles = `
   .hv-shortcut-params {
     display: flex;
     flex-wrap: wrap;
+    gap: 24px;
+  }
+
+  .hv-shortcut-param {
+    display: flex;
+    align-items: center;
     gap: 8px;
-    margin-inline: -16px;
+  }
+
+  .hv-shortcut-param > :last-child {
+    width: 40px;
+    flex-shrink: 0;
   }
 `;
 
 function modeLabel(mode: LinUwUxMode): string {
-  return mode === 'runtime' ? 'LinUwUx runtime' : 'LinUwUx Proton';
+  return mode === 'runtime' ? 'LinUwUx Runtime' : 'LinUwUx Proton';
 }
 
 export function ShortcutManagementPage() {
@@ -175,8 +184,16 @@ export function ShortcutManagementPage() {
         await enableManagedGame(game, mode, mode === 'runtime' ? (params[game.appId] ?? []) : []);
       } else {
         await disableManagedGame(game);
-        setSelections((current) => ({ ...current, [game.appId]: effectiveGameMode(configuration, game.appId) }));
-        setParams((current) => ({ ...current, [game.appId]: configuration.games[game.appId]?.params ?? [] }));
+        setSelections((current) => {
+          const next = { ...current };
+          delete next[game.appId];
+          return next;
+        });
+        setParams((current) => {
+          const next = { ...current };
+          delete next[game.appId];
+          return next;
+        });
       }
       await reloadBackendAndLibrary();
     } catch (reason) {
@@ -220,18 +237,18 @@ export function ShortcutManagementPage() {
         <div className='hv-shortcut-header'>
           <div className='hv-shortcut-name'>
             {game.name}
+            <div className='hv-shortcut-summary'>
+              {modeLabel(mode)}
+              {mode === 'runtime' &&
+                savedParams.length > 0 &&
+                `: ${savedParams.map((param) => `${param}=1`).join(', ')}`}
+            </div>
             {description && <div className='hv-shortcut-summary'>{description}</div>}
-            {mode === 'runtime' && savedParams.length > 0 && (
-              <div className='hv-shortcut-summary'>
-                LinUwUx params: {savedParams.map((param) => `${param}=1`).join(', ')}
-              </div>
-            )}
             {!isModeAvailable(status, mode) && (
               <div className='hv-shortcut-summary'>Selected method requires setup.</div>
             )}
           </div>
           <div className='hv-shortcut-actions'>
-            <span>{modeLabel(mode)}</span>
             <div className='hv-shortcut-toggle'>
               <Toggle value={true} disabled={busy !== undefined} onChange={(enabled) => void toggle(game, enabled)} />
             </div>
@@ -248,52 +265,68 @@ export function ShortcutManagementPage() {
     const available = isModeAvailable(status, selected);
     const description = shortcutDescription(game, displayState(game.appId), busy === game.appId);
     return (
-      <Field key={game.appId} className='hv-shortcut-item' childrenLayout='below' childrenContainerWidth='max'>
-        <div className='hv-shortcut-header'>
-          <div className='hv-shortcut-name'>
-            {game.name}
-            {description && <div className='hv-shortcut-summary'>{description}</div>}
-            {!available && <div className='hv-shortcut-summary'>Selected method requires setup.</div>}
-          </div>
-          <div className='hv-shortcut-actions'>
-            <Dropdown
-              menuLabel='LinUwUx method'
-              rgOptions={methodOptions}
-              selectedOption={selected}
-              disabled={busy !== undefined || game.missing}
-              onChange={(option) => changeMode(game, String(option.data) as LinUwUxMode)}
-            />
-            <div className='hv-shortcut-toggle'>
-              <Toggle
-                value={false}
-                disabled={busy !== undefined || !available}
-                onChange={(enabled) => void toggle(game, enabled)}
+      <Field
+        key={game.appId}
+        className='hv-shortcut-item'
+        childrenLayout='below'
+        childrenContainerWidth='max'
+        focusable={false}
+      >
+        <Focusable noFocusRing flow-children='column'>
+          <div className='hv-shortcut-header'>
+            <div className='hv-shortcut-name'>
+              {game.name}
+              {description && <div className='hv-shortcut-summary'>{description}</div>}
+              {!available && <div className='hv-shortcut-summary'>Selected method requires setup.</div>}
+            </div>
+            <Focusable
+              className='hv-shortcut-actions'
+              noFocusRing
+              flow-children='row'
+              navEntryPreferPosition={NavEntryPositionPreferences.MAINTAIN_X}
+            >
+              <Dropdown
+                menuLabel='LinUwUx method'
+                rgOptions={methodOptions}
+                selectedOption={selected}
+                disabled={busy !== undefined || game.missing}
+                onChange={(option) => changeMode(game, String(option.data) as LinUwUxMode)}
               />
-            </div>
-          </div>
-        </div>
-        {selected === 'runtime' && (
-          <>
-            <DialogLabel className='hv-shortcut-guidance'>
-              Optional runtime variables. Only enable these if you understand what they do or your game’s compatibility
-              instructions require them. Leave them off otherwise.
-            </DialogLabel>
-            <div className='hv-shortcut-params'>
-              {LINUWUX_PARAMS.map((param) => (
-                <ToggleField
-                  bottomSeparator='standard'
-                  key={param.name}
-                  label={param.name}
-                  highlightOnFocus={false}
-                  tooltip={param.tooltip}
-                  checked={selectedParams.includes(param.name)}
-                  disabled={busy !== undefined || game.missing}
-                  onChange={(enabled) => changeParam(game.appId, param.name, enabled)}
+              <div className='hv-shortcut-toggle'>
+                <Toggle
+                  value={false}
+                  disabled={busy !== undefined || !available}
+                  onChange={(enabled) => void toggle(game, enabled)}
                 />
-              ))}
-            </div>
-          </>
-        )}
+              </div>
+            </Focusable>
+          </div>
+          {selected === 'runtime' && (
+            <>
+              <DialogLabel className='hv-shortcut-guidance'>
+                Optional runtime variables. Only enable these if you understand what they do or your game’s
+                compatibility instructions require them. Leave them off otherwise.
+              </DialogLabel>
+              <Focusable
+                className='hv-shortcut-params'
+                noFocusRing
+                flow-children='row'
+                navEntryPreferPosition={NavEntryPositionPreferences.MAINTAIN_X}
+              >
+                {LINUWUX_PARAMS.map((param) => (
+                  <div key={param.name} className='hv-shortcut-param'>
+                    <span title={param.tooltip}>{param.name}</span>
+                    <Toggle
+                      value={selectedParams.includes(param.name)}
+                      disabled={busy !== undefined || game.missing}
+                      onChange={(enabled) => changeParam(game.appId, param.name, enabled)}
+                    />
+                  </div>
+                ))}
+              </Focusable>
+            </>
+          )}
+        </Focusable>
       </Field>
     );
   };
