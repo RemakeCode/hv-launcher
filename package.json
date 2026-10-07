@@ -10,6 +10,7 @@
     "release:preview": "semantic-release --dry-run",
     "watch": "npm run typecheck && NODE_ENV=development rollup -c -w",
     "typecheck": "tsc --noEmit",
+    "format": "prettier --write",
     "test": "vitest run"
   },
   "license": "GPL-2.0-only",
