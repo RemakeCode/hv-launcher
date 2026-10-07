@@ -68,7 +68,7 @@ Selecting Runtime for a disabled shortcut exposes optional LinUwUx params. Leave
 
 Choose **Patched Proton** or **LinUwUx runtime** beside the shortcut's enable toggle. To change an enabled shortcut's method, disable it, select the new method, then enable it again. Existing records without a method retain patched Proton behavior and their saved launch options.
 
-Runtime launches use absolute paths in the order HV Launcher → LinUwUx → the original command, including Gamescope when present. Original options are restored on disable only if Steam still contains HV Launcher's managed value; external edits are preserved.
+Runtime launches use absolute paths in the order HV Launcher → LinUwUx → the original command, including Gamescope when present. Disabling management restores the saved original launch options, even if the current launch options were edited while managed.
 
 [LinUwUx by brcly](https://github.com/brcly/linuwux-runtime) is a separately licensed upstream project. The plugin does not contain or acquire its runtime assets.
 
