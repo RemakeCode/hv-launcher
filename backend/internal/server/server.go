@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"hv-launcher/internal/auth"
 	"hv-launcher/internal/config"
 	"hv-launcher/internal/cpuidmodule"
@@ -22,6 +20,9 @@ import (
 	"hv-launcher/internal/shortcuts"
 	"hv-launcher/internal/system"
 	"hv-launcher/internal/umip"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 )
 
 const (
